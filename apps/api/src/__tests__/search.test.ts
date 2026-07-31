@@ -99,14 +99,25 @@ describe("searchSongs — vector ordering", () => {
     const queryVector = unitVector(0);
     const vectorLiteral = `[${queryVector.join(",")}]`;
 
-    const { rows } = await pool.query<{ id: string; distance: string }>(
-      `SELECT id, (embedding <=> $1::vector) AS distance
-       FROM songs
-       WHERE embedding IS NOT NULL
-       ORDER BY distance
-       LIMIT 10`,
-      [vectorLiteral],
-    );
+    // The IVFFlat index (lists=100) is APPROXIMATE: it scans only `ivfflat.probes`
+    // lists (default 1). With few, scattered rows the planner may use the index and
+    // miss a row in an un-probed list. This test asserts exact cosine ordering, so
+    // probe every list on a dedicated connection to force full recall (deterministic).
+    const client = await pool.connect();
+    let rows: { id: string; distance: string }[];
+    try {
+      await client.query("SET ivfflat.probes = 100");
+      ({ rows } = await client.query<{ id: string; distance: string }>(
+        `SELECT id, (embedding <=> $1::vector) AS distance
+         FROM songs
+         WHERE embedding IS NOT NULL
+         ORDER BY distance
+         LIMIT 10`,
+        [vectorLiteral],
+      ));
+    } finally {
+      client.release();
+    }
 
     const ids = rows.map((r) => r.id);
     // Alpha (dim 0) must rank before Beta (dim 1) when querying near dim 0
