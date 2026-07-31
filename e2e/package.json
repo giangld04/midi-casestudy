@@ -1,0 +1,15 @@
+{
+  "name": "@ama-midi/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright end-to-end tests: auth, boundary, conflict, real-time sync deliverables",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}
