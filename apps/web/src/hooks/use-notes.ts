@@ -13,6 +13,11 @@ export interface MovePayload {
   timeTick: number;
 }
 
+/** Editable note fields exposed by the Inspector panel (all optional/partial). */
+export type NoteEdits = Partial<
+  Pick<Note, "title" | "description" | "track" | "timeTick" | "color">
+>;
+
 export interface UseNotes {
   notes: Note[];
   loading: boolean;
@@ -20,6 +25,7 @@ export interface UseNotes {
   statusMessage: string | null;
   createNote: (track: number, timeTick: number) => Promise<void>;
   moveNote: (note: Note, to: MovePayload) => Promise<void>;
+  updateNote: (note: Note, changes: NoteEdits) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
 }
 
@@ -108,6 +114,33 @@ export function useNotes(songId: string | null): UseNotes {
     [flash]
   );
 
+  // Edit any subset of a note's fields (title/description/track/timeTick/color)
+  // with the same optimistic-locking + rollback contract as moveNote.
+  const updateNote = useCallback(
+    async (note: Note, changes: NoteEdits) => {
+      setNotes((prev) =>
+        prev.map((n) => (n.id === note.id ? { ...n, ...changes } : n))
+      );
+      try {
+        const updated = await apiFetch<Note>(`/api/notes/${note.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ ...changes, version: note.version }),
+        });
+        setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+      } catch (err) {
+        setNotes((prev) => prev.map((n) => (n.id === note.id ? note : n)));
+        const msg =
+          err instanceof ApiError && err.status === 409
+            ? "Conflict: note changed by another user — reverted"
+            : err instanceof Error
+            ? err.message
+            : "Update failed";
+        flash(msg);
+      }
+    },
+    [flash]
+  );
+
   const deleteNote = useCallback(async (id: string) => {
     // Optimistic remove
     setNotes((prev) => prev.filter((n) => n.id !== id));
@@ -120,5 +153,5 @@ export function useNotes(songId: string | null): UseNotes {
     }
   }, []);
 
-  return { notes, loading, error, statusMessage, createNote, moveNote, deleteNote };
+  return { notes, loading, error, statusMessage, createNote, moveNote, updateNote, deleteNote };
 }

@@ -18,12 +18,7 @@ import type { Note } from "@ama-midi/shared";
 import type { AppSocket } from "@/lib/socket-client";
 import { apiFetch } from "@/lib/api-client";
 import { trackColor } from "@/lib/colors";
-import type { UseNotes, MovePayload } from "./use-notes";
-
-/** A mutation awaiting server confirmation; `rollback` restores prior state. */
-interface PendingOp {
-  rollback: () => void;
-}
+import type { UseNotes, MovePayload, NoteEdits } from "./use-notes";
 
 const newReqId = (): string => crypto.randomUUID();
 
@@ -32,7 +27,8 @@ export function useRealtimeNotes(songId: string | null, socket: AppSocket): UseN
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const pending = useRef<Map<string, PendingOp>>(new Map());
+  // Set of reqIds we emitted and still await a server echo for.
+  const pending = useRef<Set<string>>(new Set());
 
   const flash = useCallback((msg: string) => {
     setStatusMessage(msg);
@@ -48,6 +44,18 @@ export function useRealtimeNotes(songId: string | null, socket: AppSocket): UseN
       return next;
     });
   }, []);
+
+  // Re-pull the authoritative note list from the server. Used to reconcile after
+  // a rejected mutation instead of restoring a stale local snapshot (which could
+  // clobber a concurrent winner's already-applied broadcast).
+  const refetchNotes = useCallback(async () => {
+    if (!songId) return;
+    try {
+      setNotes(await apiFetch<Note[]>(`/api/songs/${songId}/notes`));
+    } catch {
+      /* transient network error — keep current state, next mutation reconciles */
+    }
+  }, [songId]);
 
   // Initial load whenever the song changes
   useEffect(() => {
@@ -67,8 +75,7 @@ export function useRealtimeNotes(songId: string | null, socket: AppSocket): UseN
   // Bind server → client note stream
   useEffect(() => {
     const onCreated = ({ note, reqId }: { note: Note; reqId: string }) => {
-      const op = pending.current.get(reqId);
-      if (op) {
+      if (pending.current.has(reqId)) {
         // Our own create confirmed: swap the temp note for the real row
         pending.current.delete(reqId);
         setNotes((prev) => [
@@ -88,11 +95,8 @@ export function useRealtimeNotes(songId: string | null, socket: AppSocket): UseN
       setNotes((prev) => prev.filter((n) => n.id !== noteId));
     };
     const onRejected = ({ reqId, error: msg }: { reqId: string; error: string }) => {
-      const op = pending.current.get(reqId);
-      if (op) {
-        op.rollback();
-        pending.current.delete(reqId);
-      }
+      // Reconcile against server truth rather than undoing to a stale snapshot.
+      if (pending.current.delete(reqId)) void refetchNotes();
       flash(msg || "Change rejected — reverted");
     };
 
@@ -106,7 +110,7 @@ export function useRealtimeNotes(songId: string | null, socket: AppSocket): UseN
       socket.off("note:deleted", onDeleted);
       socket.off("note:rejected", onRejected);
     };
-  }, [socket, upsert, flash]);
+  }, [socket, upsert, flash, refetchNotes]);
 
   const createNote = useCallback(
     async (track: number, timeTick: number) => {
@@ -126,9 +130,7 @@ export function useRealtimeNotes(songId: string | null, socket: AppSocket): UseN
         updatedAt: now,
       };
       setNotes((prev) => [...prev, optimistic]);
-      pending.current.set(reqId, {
-        rollback: () => setNotes((prev) => prev.filter((n) => n.id !== tempId)),
-      });
+      pending.current.add(reqId);
       socket.emit("note:create", {
         songId,
         reqId,
@@ -152,10 +154,7 @@ export function useRealtimeNotes(songId: string | null, socket: AppSocket): UseN
             : n
         )
       );
-      pending.current.set(reqId, {
-        rollback: () =>
-          setNotes((prev) => prev.map((n) => (n.id === note.id ? note : n))),
-      });
+      pending.current.add(reqId);
       socket.emit("note:update", {
         songId,
         reqId,
@@ -168,25 +167,37 @@ export function useRealtimeNotes(songId: string | null, socket: AppSocket): UseN
     [songId, socket]
   );
 
+  // Edit any subset of a note's fields over the socket. Shares the reqId
+  // pending-op ledger so a server reject rolls the optimistic change back.
+  const updateNote = useCallback(
+    async (note: Note, changes: NoteEdits) => {
+      if (!songId) return;
+      const reqId = `edit-${newReqId()}`;
+      setNotes((prev) =>
+        prev.map((n) => (n.id === note.id ? { ...n, ...changes } : n))
+      );
+      pending.current.add(reqId);
+      socket.emit("note:update", {
+        songId,
+        reqId,
+        noteId: note.id,
+        ...changes,
+        version: note.version,
+      });
+    },
+    [songId, socket]
+  );
+
   const deleteNote = useCallback(
     async (id: string) => {
       if (!songId) return;
       const reqId = newReqId();
-      // Capture the removed row inside the updater so we never read stale state
-      let removed: Note | null = null;
-      setNotes((prev) => {
-        removed = prev.find((n) => n.id === id) ?? null;
-        return prev.filter((n) => n.id !== id);
-      });
-      pending.current.set(reqId, {
-        rollback: () => {
-          if (removed) setNotes((prev) => [...prev, removed as Note]);
-        },
-      });
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+      pending.current.add(reqId);
       socket.emit("note:delete", { songId, reqId, noteId: id });
     },
     [songId, socket]
   );
 
-  return { notes, loading, error, statusMessage, createNote, moveNote, deleteNote };
+  return { notes, loading, error, statusMessage, createNote, moveNote, updateNote, deleteNote };
 }

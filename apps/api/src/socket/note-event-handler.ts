@@ -97,6 +97,7 @@ export function registerNoteEventHandlers(io: IO, socket: ClientSocket): void {
     try {
       const input = updateNoteSchema.parse({
         title: payload.title,
+        description: payload.description,
         track: payload.track,
         timeTick: payload.timeTick,
         color: payload.color,

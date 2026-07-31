@@ -65,6 +65,7 @@ export interface NoteUpdatePayload {
   track?: number;
   timeTick?: number;
   title?: string;
+  description?: string;
   color?: string;
   /** Expected current version for optimistic locking */
   version: number;

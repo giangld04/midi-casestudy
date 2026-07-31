@@ -3,6 +3,7 @@
  * Also surfaces transient status messages (conflicts, errors).
  */
 
+import type { ReactNode } from "react";
 import type { Note } from "@ama-midi/shared";
 
 interface StatusBarProps {
@@ -16,13 +17,37 @@ export default function StatusBar({
   statusMessage,
   noteCount,
 }: StatusBarProps) {
-  const content = statusMessage
-    ? statusMessage
-    : selectedNote
-    ? `Selected: "${selectedNote.title}" — Track ${selectedNote.track}, Tick ${selectedNote.timeTick} (${(selectedNote.timeTick / 4).toFixed(2)}s) [Del to delete]`
-    : `${noteCount} note${noteCount !== 1 ? "s" : ""} — click grid to add`;
-
   const isWarning = !!statusMessage;
+
+  // Highlighted "Press Delete" hint so users can discover the delete action.
+  const deleteHint = (
+    <span
+      style={{
+        marginLeft: 8,
+        padding: "1px 6px",
+        borderRadius: 4,
+        background: "var(--accent, #22d3ee)",
+        color: "#0b0b0f",
+        fontWeight: 600,
+      }}
+    >
+      ⌫ Press Delete to remove
+    </span>
+  );
+
+  let content: ReactNode;
+  if (statusMessage) {
+    content = statusMessage;
+  } else if (selectedNote) {
+    content = (
+      <>
+        {`Selected: "${selectedNote.title}" — Track ${selectedNote.track}, Tick ${selectedNote.timeTick} (${(selectedNote.timeTick / 4).toFixed(2)}s)`}
+        {deleteHint}
+      </>
+    );
+  } else {
+    content = `${noteCount} note${noteCount !== 1 ? "s" : ""} — click grid to add`;
+  }
 
   return (
     <footer

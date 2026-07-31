@@ -16,6 +16,7 @@ import StatusBar from "@/components/layout/status-bar";
 import ProtectedRoute from "@/components/layout/protected-route";
 import SongList from "@/components/song/song-list";
 import PianoRollStage from "@/components/piano-roll/piano-roll-stage";
+import NoteInspector from "@/components/piano-roll/note-inspector";
 import UserMenu from "@/components/auth/user-menu";
 
 function MainApp() {
@@ -27,6 +28,11 @@ function MainApp() {
 
   const activeSong =
     songs.songs.find((s) => s.id === songs.selectedSongId) ?? null;
+
+  // Resolve the selected note against the live notes array so the Inspector &
+  // status bar always see the latest fields + version (avoids a stale snapshot).
+  const liveSelectedNote =
+    notes.notes.find((n) => n.id === selectedNote?.id) ?? null;
 
   return (
     <AppLayout
@@ -62,6 +68,7 @@ function MainApp() {
             }}
             cursors={collab.cursors}
             onCursorMove={collab.emitCursor}
+            onSelectionChange={setSelectedNote}
           />
         ) : (
           <div
@@ -78,9 +85,21 @@ function MainApp() {
           </div>
         )
       }
+      inspector={
+        songs.selectedSongId ? (
+          <NoteInspector
+            note={liveSelectedNote}
+            onUpdate={notes.updateNote}
+            onDelete={(id) => {
+              if (selectedNote?.id === id) setSelectedNote(null);
+              return notes.deleteNote(id);
+            }}
+          />
+        ) : undefined
+      }
       statusBar={
         <StatusBar
-          selectedNote={selectedNote}
+          selectedNote={liveSelectedNote}
           statusMessage={notes.statusMessage}
           noteCount={notes.notes.length}
         />

@@ -52,6 +52,8 @@ interface PianoRollStageProps {
   cursors?: RemoteCursor[];
   /** Report local pointer position (grid coords) for cursor broadcast */
   onCursorMove?: (track: number, timeTick: number) => void;
+  /** Notify parent when the selected note changes (drives the status bar) */
+  onSelectionChange?: (note: Note | null) => void;
 }
 
 export default function PianoRollStage({
@@ -61,6 +63,7 @@ export default function PianoRollStage({
   onDeleteNote,
   cursors = [],
   onCursorMove,
+  onSelectionChange,
 }: PianoRollStageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [stageWidth, setStageWidth] = useState(800);
@@ -69,6 +72,11 @@ export default function PianoRollStage({
   const [pixelsPerTick, setPixelsPerTick] = useState(DEFAULT_PIXELS_PER_TICK);
 
   const stageHeight = MAX_TIME_TICK * pixelsPerTick;
+
+  // Lift selection up so the status bar (parent) reflects the selected note.
+  useEffect(() => {
+    onSelectionChange?.(selectedNote);
+  }, [selectedNote, onSelectionChange]);
 
   // Observe container size
   useEffect(() => {

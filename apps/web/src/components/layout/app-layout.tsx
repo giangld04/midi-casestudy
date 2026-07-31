@@ -9,6 +9,8 @@ interface AppLayoutProps {
   toolbar: ReactNode;
   sidebar: ReactNode;
   main: ReactNode;
+  /** Optional right-side panel (Note Inspector) */
+  inspector?: ReactNode;
   statusBar: ReactNode;
 }
 
@@ -16,6 +18,7 @@ export default function AppLayout({
   toolbar,
   sidebar,
   main,
+  inspector,
   statusBar,
 }: AppLayoutProps) {
   return (
@@ -33,6 +36,7 @@ export default function AppLayout({
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {sidebar}
         <main style={{ flex: 1, overflow: "hidden" }}>{main}</main>
+        {inspector}
       </div>
 
       {statusBar}
