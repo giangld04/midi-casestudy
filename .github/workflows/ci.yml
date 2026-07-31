@@ -1,0 +1,143 @@
+# CI pipeline: typecheck → lint → build → test for the full monorepo.
+# Runs on every push and pull_request.
+# Deploy job (scaffold) runs only on push to main — requires user to add RAILWAY_TOKEN secret.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+env:
+  # Avoids interactive prompts from pnpm / turbo
+  CI: true
+  # Skip rate-limit and CSRF in test environment (matches existing middleware logic)
+  NODE_ENV: test
+
+jobs:
+  # ── typecheck + lint + build + test ─────────────────────────────────────────
+  ci:
+    name: Typecheck / Lint / Build / Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Must include pgvector — matches the image used in docker-compose.yml
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ama_midi_user
+          POSTGRES_PASSWORD: ama_midi_pass
+          POSTGRES_DB: ama_midi_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ama_midi_user -d ama_midi_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ama_midi_user:ama_midi_pass@localhost:5432/ama_midi_db
+      REDIS_URL: redis://localhost:6379
+      AUTH_SECRET: ci-test-secret-do-not-use-in-production
+      AUTH_URL: http://localhost:3000
+      CORS_ORIGIN: http://localhost:5173
+      WEB_ORIGIN: http://localhost:5173
+      PORT: 3000
+      # GEMINI_API_KEY intentionally absent — search tests fall back to ILIKE
+      # (see search.test.ts describe "(c) ILIKE fallback" and "(e) [gated]" skip)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable corepack + pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.31.0 --activate
+
+      - name: Get pnpm store path
+        id: pnpm-cache
+        run: echo "dir=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.dir }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run DB migrations
+        # Uses tsx to run the migrate script directly (no compile step needed for migration runner)
+        run: |
+          cd packages/db
+          npx tsx src/migrate.ts
+
+      - name: Test (all workspaces)
+        run: pnpm test
+
+  # ── deploy scaffold ──────────────────────────────────────────────────────────
+  # This job is a scaffold for Railway deployment.
+  # To activate: add RAILWAY_TOKEN as a GitHub Actions secret in your repo settings.
+  # Install Railway CLI: https://docs.railway.app/deploy/cli
+  deploy:
+    name: Deploy to Railway (scaffold)
+    runs-on: ubuntu-latest
+    needs: ci
+    # Only deploy on push to main — not on PRs
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via Railway CLI
+        # Requires RAILWAY_TOKEN secret in GitHub repo settings.
+        # Set it at: Settings → Secrets and variables → Actions → New repository secret
+        # Then uncomment the lines below:
+        #
+        # env:
+        #   RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        # run: |
+        #   npm install -g @railway/cli
+        #   railway up --service api
+        #   railway up --service web
+        run: echo "Deploy scaffold — add RAILWAY_TOKEN secret and uncomment deploy commands to activate."

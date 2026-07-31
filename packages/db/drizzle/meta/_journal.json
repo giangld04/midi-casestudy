@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785412174867,
+      "tag": "0000_faulty_master_chief",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785468033567,
+      "tag": "0001_charming_captain_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1753920120000,
+      "tag": "0002_phase08_ivfflat_embedding_index",
+      "breakpoints": true
+    }
+  ]
+}

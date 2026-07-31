@@ -1,0 +1,39 @@
+# Version control
+.git
+.gitignore
+
+# Dependencies (rebuilt inside Docker)
+node_modules
+**/node_modules
+
+# Build artifacts (rebuilt inside Docker)
+**/dist
+**/.next
+
+# Turbo cache
+.turbo
+**/.turbo
+
+# Local environment files (NEVER bake into images)
+.env
+.env.*
+!.env.example
+
+# Test artifacts
+**/coverage
+**/__snapshots__
+
+# Editor / OS
+.DS_Store
+*.swp
+.vscode
+.idea
+
+# Docker files themselves (not needed in image context)
+**/Dockerfile
+docker-compose*.yml
+
+# Docs and plans (not needed at runtime)
+docs
+plans
+*.md

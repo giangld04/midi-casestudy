@@ -1,0 +1,42 @@
+{
+  "name": "@ama-midi/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "echo 'No linting configured'"
+  },
+  "dependencies": {
+    "@ama-midi/db": "workspace:*",
+    "@ama-midi/shared": "workspace:*",
+    "@google/genai": "^2.15.0",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "better-auth": "^1.6.25",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.38.3",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.6.1",
+    "ioredis": "^5.4.2",
+    "pg": "^8.22.0",
+    "socket.io": "^4.7.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/supertest": "^6.0.2",
+    "socket.io-client": "^4.7.5",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

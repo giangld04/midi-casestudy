@@ -1,0 +1,81 @@
+/* Dark studio theme — CSS custom properties */
+
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --grid-line: #2d2d44;
+  --grid-bold: #3d3d5c;
+  --text-primary: #e0e0e0;
+  --text-muted: #8888aa;
+  --accent: #00d4ff;
+  --accent-hover: #33ddff;
+  --danger: #ff6b6b;
+  --border: #2d2d44;
+  --radius: 4px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  padding: 4px 12px;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+button:hover {
+  background: var(--bg-tertiary);
+}
+
+button.accent {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+
+button.accent:hover {
+  background: var(--accent-hover);
+}
+
+input,
+textarea {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--accent);
+}

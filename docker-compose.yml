@@ -1,0 +1,41 @@
+# Local development: postgres + redis infrastructure only.
+# api and web run via `pnpm dev` (turbo) outside Docker with hot-reload.
+# Use docker-compose.prod.yml to run the full containerised stack.
+
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ama-midi-postgres
+    environment:
+      POSTGRES_USER: ama_midi_user
+      POSTGRES_PASSWORD: ama_midi_pass
+      POSTGRES_DB: ama_midi_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ama_midi_user -d ama_midi_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ama-midi-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --save 20 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
