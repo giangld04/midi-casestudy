@@ -3,6 +3,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import path from "path";
+import { config as loadEnv } from "dotenv";
+
+// Load monorepo-root .env for local runs; does not override CI-provided env vars.
+loadEnv({ path: path.resolve(__dirname, "../../../.env") });
 
 async function runMigrations() {
   const url = process.env["DATABASE_URL"];
