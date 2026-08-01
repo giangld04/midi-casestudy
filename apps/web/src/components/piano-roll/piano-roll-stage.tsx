@@ -113,6 +113,12 @@ export default function PianoRollStage({
   // Delete key handler
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // Ignore when the user is editing a form field — otherwise Backspace/Delete
+      // used to erase text inside an input would also delete the selected note.
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
+
       if ((e.key === "Delete" || e.key === "Backspace") && selectedNote) {
         void onDeleteNote(selectedNote.id);
         setSelectedNote(null);
