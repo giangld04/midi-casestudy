@@ -11,6 +11,17 @@
 
 import type { ApiResponse } from "@ama-midi/shared";
 
+// API origin (same source as auth-client/socket-client). Relative paths like "/api/songs"
+// must be resolved against this — otherwise fetch hits the web origin and nginx returns
+// index.html (SPA fallback), which the caller then fails to parse as JSON.
+const API_URL =
+  (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:3000";
+
+/** Resolve a request path: absolute URLs pass through, "/paths" get the API origin prefixed. */
+function resolveUrl(url: string): string {
+  return /^https?:\/\//.test(url) ? url : `${API_URL}${url}`;
+}
+
 /** Error thrown when the server returns ok:false or a non-ok HTTP status */
 export class ApiError extends Error {
   constructor(
@@ -32,7 +43,7 @@ export async function apiFetch<T>(
   url: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(resolveUrl(url), {
     headers: { "Content-Type": "application/json", ...options?.headers },
     // include cookies so the session cookie is sent with every request
     credentials: "include",
