@@ -18,7 +18,6 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
       <LoginPage
         onLogin={auth.login}
         onSignup={auth.signup}
-        onGoogle={auth.loginWithGoogle}
         onGithub={auth.loginWithGithub}
       />
     );

@@ -1,17 +1,16 @@
-// Login page — email/password form + optional Google/GitHub OAuth buttons.
-// OAuth buttons only render if the social providers are configured server-side.
+// Login page — email/password form + GitHub OAuth button.
+// The GitHub button only works if the provider is configured server-side.
 // Styling matches the dark-theme design system: var(--bg-*), var(--accent), etc.
 import { useState } from "react";
 interface LoginPageProps {
   onLogin: (email: string, password: string) => Promise<{ error?: string }>;
   onSignup: (email: string, password: string, name: string) => Promise<{ error?: string }>;
-  onGoogle: () => Promise<void>;
   onGithub: () => Promise<void>;
 }
 
 type Mode = "login" | "signup";
 
-export default function LoginPage({ onLogin, onSignup, onGoogle, onGithub }: LoginPageProps) {
+export default function LoginPage({ onLogin, onSignup, onGithub }: LoginPageProps) {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -131,11 +130,8 @@ export default function LoginPage({ onLogin, onSignup, onGoogle, onGithub }: Log
           </button>
         </form>
 
-        {/* Social login buttons */}
+        {/* Social login */}
         <div style={{ marginTop: 16 }}>
-          <button style={socialBtnStyle} type="button" onClick={onGoogle}>
-            Continue with Google
-          </button>
           <button style={socialBtnStyle} type="button" onClick={onGithub}>
             Continue with GitHub
           </button>

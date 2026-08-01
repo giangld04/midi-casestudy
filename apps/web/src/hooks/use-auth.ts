@@ -22,10 +22,6 @@ export function useAuth() {
     await authClient.signOut();
   }, []);
 
-  const loginWithGoogle = useCallback(async () => {
-    await authClient.signIn.social({ provider: "google" });
-  }, []);
-
   const loginWithGithub = useCallback(async () => {
     await authClient.signIn.social({ provider: "github" });
   }, []);
@@ -38,7 +34,6 @@ export function useAuth() {
     login,
     signup,
     logout,
-    loginWithGoogle,
     loginWithGithub,
   };
 }
