@@ -52,13 +52,14 @@ export function registerNoteEventHandlers(io: IO, socket: ClientSocket): void {
   /**
    * Gate every mutation: the sender MUST have joined the target song room
    * (prevents editing arbitrary songs by UUID) and stay under the rate limit.
+   * Rate limit is keyed by userId so it holds per user across nodes/tabs.
    */
-  const precheck = (songId: string, reqId: string): boolean => {
+  const precheck = async (songId: string, reqId: string): Promise<boolean> => {
     if (getMemberSongId(socket.id) !== songId) {
       reject(reqId, "FORBIDDEN", "Join the song before editing");
       return false;
     }
-    if (!limiter.take(socket.id)) {
+    if (!(await limiter.take(socket.data.userId))) {
       reject(reqId, "RATE_LIMIT", "Too many edits — slow down");
       return false;
     }
@@ -73,7 +74,7 @@ export function registerNoteEventHandlers(io: IO, socket: ClientSocket): void {
   };
 
   socket.on("note:create", async (payload) => {
-    if (!precheck(payload.songId, payload.reqId)) return;
+    if (!(await precheck(payload.songId, payload.reqId))) return;
     try {
       // Reuse REST validator: title/track/timeTick/color bounds enforced here too
       const input = createNoteSchema.parse({
@@ -93,7 +94,7 @@ export function registerNoteEventHandlers(io: IO, socket: ClientSocket): void {
   });
 
   socket.on("note:update", async (payload) => {
-    if (!precheck(payload.songId, payload.reqId)) return;
+    if (!(await precheck(payload.songId, payload.reqId))) return;
     try {
       const input = updateNoteSchema.parse({
         title: payload.title,
@@ -114,7 +115,7 @@ export function registerNoteEventHandlers(io: IO, socket: ClientSocket): void {
   });
 
   socket.on("note:delete", async (payload) => {
-    if (!precheck(payload.songId, payload.reqId)) return;
+    if (!(await precheck(payload.songId, payload.reqId))) return;
     try {
       await deleteNote(payload.noteId, socket.data.userId ?? null);
       io.to(roomOf(payload.songId)).emit("note:deleted", {
@@ -126,5 +127,5 @@ export function registerNoteEventHandlers(io: IO, socket: ClientSocket): void {
     }
   });
 
-  socket.on("disconnect", () => limiter.clear(socket.id));
+  socket.on("disconnect", () => limiter.clear(socket.data.userId));
 }
