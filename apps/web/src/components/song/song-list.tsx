@@ -14,6 +14,7 @@ interface SongListProps {
   error: string | null;
   onSelect: (id: string) => void;
   onCreate: (title: string) => Promise<Song | null>;
+  onDelete: (id: string) => Promise<boolean>;
 }
 
 export default function SongList({
@@ -23,13 +24,21 @@ export default function SongList({
   error,
   onSelect,
   onCreate,
+  onDelete,
 }: SongListProps) {
   const [showDialog, setShowDialog] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   async function handleCreate(title: string) {
     const song = await onCreate(title);
     setShowDialog(false);
     if (song) onSelect(song.id);
+  }
+
+  async function handleDelete(song: Song, e: React.MouseEvent) {
+    e.stopPropagation(); // don't trigger row selection
+    if (!window.confirm(`Delete "${song.title}"? This removes all its notes.`)) return;
+    await onDelete(song.id);
   }
 
   return (
@@ -83,35 +92,61 @@ export default function SongList({
             No songs yet
           </p>
         )}
-        {songs.map((song) => (
-          <button
-            key={song.id}
-            onClick={() => onSelect(song.id)}
-            style={{
-              display: "block",
-              width: "100%",
-              textAlign: "left",
-              padding: "7px 12px",
-              border: "none",
-              borderRadius: 0,
-              background:
-                song.id === selectedSongId
-                  ? "var(--bg-tertiary)"
-                  : "transparent",
-              color:
-                song.id === selectedSongId
-                  ? "var(--accent)"
-                  : "var(--text-primary)",
-              fontSize: 13,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {song.title}
-          </button>
-        ))}
+        {songs.map((song) => {
+          const isSelected = song.id === selectedSongId;
+          return (
+            <div
+              key={song.id}
+              onMouseEnter={() => setHoveredId(song.id)}
+              onMouseLeave={() => setHoveredId((cur) => (cur === song.id ? null : cur))}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                background: isSelected ? "var(--bg-tertiary)" : "transparent",
+              }}
+            >
+              <button
+                onClick={() => onSelect(song.id)}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  textAlign: "left",
+                  padding: "7px 12px",
+                  border: "none",
+                  background: "transparent",
+                  color: isSelected ? "var(--accent)" : "var(--text-primary)",
+                  fontSize: 13,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {song.title}
+              </button>
+              {/* Delete — visible on hover or when selected */}
+              <button
+                onClick={(e) => handleDelete(song, e)}
+                title="Delete song"
+                aria-label={`Delete ${song.title}`}
+                style={{
+                  flexShrink: 0,
+                  padding: "2px 10px",
+                  border: "none",
+                  background: "transparent",
+                  color: "var(--text-muted)",
+                  fontSize: 15,
+                  lineHeight: 1,
+                  cursor: "pointer",
+                  visibility:
+                    hoveredId === song.id || isSelected ? "visible" : "hidden",
+                }}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       {showDialog && (

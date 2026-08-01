@@ -54,6 +54,7 @@ function MainApp() {
           error={songs.error}
           onSelect={songs.selectSong}
           onCreate={songs.createSong}
+          onDelete={songs.deleteSong}
         />
       }
       main={

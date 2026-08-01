@@ -14,6 +14,7 @@ export interface UseSongs {
   error: string | null;
   selectSong: (id: string) => void;
   createSong: (title: string, description?: string) => Promise<Song | null>;
+  deleteSong: (id: string) => Promise<boolean>;
   refresh: () => void;
 }
 
@@ -57,6 +58,22 @@ export function useSongs(): UseSongs {
     []
   );
 
+  const deleteSong = useCallback(
+    async (id: string): Promise<boolean> => {
+      try {
+        await apiFetch<void>(`/api/songs/${id}`, { method: "DELETE" });
+        setSongs((prev) => prev.filter((s) => s.id !== id));
+        // Clear selection if the deleted song was selected
+        setSelectedSongId((cur) => (cur === id ? null : cur));
+        return true;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to delete song");
+        return false;
+      }
+    },
+    []
+  );
+
   return {
     songs,
     selectedSongId,
@@ -64,6 +81,7 @@ export function useSongs(): UseSongs {
     error,
     selectSong: setSelectedSongId,
     createSong,
+    deleteSong,
     refresh: () => void fetchSongs(),
   };
 }
