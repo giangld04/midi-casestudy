@@ -10,6 +10,7 @@ const AUTH_SECRET = process.env["AUTH_SECRET"];
 if (!AUTH_SECRET) throw new Error("AUTH_SECRET env var is required");
 
 const AUTH_URL = process.env["AUTH_URL"] ?? "http://localhost:3000";
+const IS_PROD = process.env["NODE_ENV"] === "production";
 const DATABASE_URL = process.env["DATABASE_URL"];
 if (!DATABASE_URL) throw new Error("DATABASE_URL env var is required");
 
@@ -57,7 +58,14 @@ export const auth = betterAuth({
   ],
   advanced: {
     cookiePrefix: "ama-midi",
-    useSecureCookies: process.env["NODE_ENV"] === "production",
+    useSecureCookies: IS_PROD,
+    // Web SPA and API live on different *.up.railway.app subdomains (cross-site under the
+    // Public Suffix List). The OAuth state/PKCE cookie is set via a cross-site fetch from the
+    // web origin, so it must be SameSite=None; Secure or the browser drops it — which surfaces
+    // as `state_mismatch` on the GitHub callback. Only applied in prod (None requires HTTPS).
+    ...(IS_PROD
+      ? { defaultCookieAttributes: { sameSite: "none" as const, secure: true } }
+      : {}),
   },
 });
 
