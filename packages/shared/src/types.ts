@@ -11,6 +11,8 @@ export interface Song {
   id: string;
   title: string;
   description?: string;
+  /** Creator/owner user id. null for legacy songs created before authorization. */
+  ownerId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

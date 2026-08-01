@@ -1,6 +1,7 @@
 // Songs table: stores MIDI song projects with optional pgvector embedding
 import { customType, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { authUser } from "./auth";
 
 /**
  * Custom Drizzle type for pgvector vector(768).
@@ -30,6 +31,13 @@ export const songs = pgTable("songs", {
     .default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description"),
+  /**
+   * Song owner (creator). Nullable so pre-authorization "legacy" songs keep
+   * owner_id = NULL and stay editable by anyone. ON DELETE SET NULL: if the
+   * owning user is removed, the song becomes a legacy (null-owner) song rather
+   * than being cascaded away.
+   */
+  ownerId: text("owner_id").references(() => authUser.id, { onDelete: "set null" }),
   /** pgvector 768-dim embedding (nullable until Phase 08 populates it) */
   embedding: vector768("embedding"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

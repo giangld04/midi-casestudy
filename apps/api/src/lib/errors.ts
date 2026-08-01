@@ -20,6 +20,13 @@ export class NotFoundError extends AppError {
   }
 }
 
+/** 403 — authenticated but not allowed to act on this resource (e.g. not the owner) */
+export class ForbiddenError extends AppError {
+  constructor(message = "Forbidden") {
+    super(403, "FORBIDDEN", message);
+  }
+}
+
 /**
  * 409 — write conflicts with existing state.
  * Used for duplicate grid positions and stale optimistic-lock versions.

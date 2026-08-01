@@ -4,7 +4,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { songs, type Song } from "@ama-midi/db";
 import { db } from "../db";
-import { NotFoundError } from "../lib/errors";
+import { ForbiddenError, NotFoundError } from "../lib/errors";
 import type { CreateSongInput, UpdateSongInput } from "../validators/song-validator";
 import { generateEmbedding, buildSongEmbeddingText } from "./embedding-service";
 
@@ -16,9 +16,29 @@ const songColumns = {
   id: songs.id,
   title: songs.title,
   description: songs.description,
+  ownerId: songs.ownerId,
   createdAt: songs.createdAt,
   updatedAt: songs.updatedAt,
 } as const;
+
+/**
+ * Owner-based authorization guard for song mutations.
+ * A song is mutable by `userId` when it is unowned (legacy null-owner songs stay
+ * open to everyone) OR the caller is the owner. Otherwise → 403 Forbidden.
+ * Throws 404 if the song does not exist.
+ */
+async function assertCanMutate(id: string, userId: string): Promise<void> {
+  const [song] = await db
+    .select({ ownerId: songs.ownerId })
+    .from(songs)
+    .where(eq(songs.id, id));
+  if (!song) {
+    throw new NotFoundError("Song not found");
+  }
+  if (song.ownerId !== null && song.ownerId !== userId) {
+    throw new ForbiddenError("You do not have permission to modify this song");
+  }
+}
 
 /** List all songs, newest first */
 export async function getAllSongs(): Promise<SongDto[]> {
@@ -58,9 +78,12 @@ function scheduleEmbedding(song: SongDto): void {
   })();
 }
 
-/** Create a new song */
-export async function createSong(input: CreateSongInput): Promise<SongDto> {
-  const [song] = await db.insert(songs).values(input).returning(songColumns);
+/** Create a new song, stamping the creator as its owner. */
+export async function createSong(input: CreateSongInput, ownerId: string): Promise<SongDto> {
+  const [song] = await db
+    .insert(songs)
+    .values({ ...input, ownerId })
+    .returning(songColumns);
   if (!song) {
     throw new Error("Failed to create song");
   }
@@ -68,8 +91,13 @@ export async function createSong(input: CreateSongInput): Promise<SongDto> {
   return song;
 }
 
-/** Update song metadata; bumps updatedAt. 404 if it does not exist. */
-export async function updateSong(id: string, input: UpdateSongInput): Promise<SongDto> {
+/** Update song metadata; bumps updatedAt. 404 if missing, 403 if not the owner. */
+export async function updateSong(
+  id: string,
+  input: UpdateSongInput,
+  userId: string,
+): Promise<SongDto> {
+  await assertCanMutate(id, userId);
   const [song] = await db
     .update(songs)
     .set({ ...input, updatedAt: new Date() })
@@ -85,8 +113,9 @@ export async function updateSong(id: string, input: UpdateSongInput): Promise<So
   return song;
 }
 
-/** Delete a song (cascades to notes + events). 404 if it does not exist. */
-export async function deleteSong(id: string): Promise<void> {
+/** Delete a song (cascades to notes + events). 404 if missing, 403 if not the owner. */
+export async function deleteSong(id: string, userId: string): Promise<void> {
+  await assertCanMutate(id, userId);
   const deleted = await db.delete(songs).where(eq(songs.id, id)).returning({ id: songs.id });
   if (deleted.length === 0) {
     throw new NotFoundError("Song not found");

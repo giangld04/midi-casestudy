@@ -52,6 +52,7 @@ function MainApp() {
           selectedSongId={songs.selectedSongId}
           loading={songs.loading}
           error={songs.error}
+          currentUserId={auth.user?.id ?? null}
           onSelect={songs.selectSong}
           onCreate={songs.createSong}
           onDelete={songs.deleteSong}

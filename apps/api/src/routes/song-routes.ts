@@ -35,7 +35,8 @@ songRouter.post(
   "/",
   validateBody(createSongSchema),
   asyncHandler(async (req, res) => {
-    const song = await createSong(req.body);
+    // requireAuth guarantees req.user is populated on all /api/songs routes.
+    const song = await createSong(req.body, req.user!.id);
     res.status(201).json({ ok: true, data: song });
   }),
 );
@@ -44,7 +45,7 @@ songRouter.put(
   "/:id",
   validateBody(updateSongSchema),
   asyncHandler(async (req, res) => {
-    const song = await updateSong(req.params["id"] as string, req.body);
+    const song = await updateSong(req.params["id"] as string, req.body, req.user!.id);
     res.json({ ok: true, data: song });
   }),
 );
@@ -52,7 +53,7 @@ songRouter.put(
 songRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
-    await deleteSong(req.params["id"] as string);
+    await deleteSong(req.params["id"] as string, req.user!.id);
     res.status(204).send();
   }),
 );

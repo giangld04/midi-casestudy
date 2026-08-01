@@ -12,6 +12,8 @@ interface SongListProps {
   selectedSongId: string | null;
   loading: boolean;
   error: string | null;
+  /** Current user id — a song is deletable only by its owner (or if unowned) */
+  currentUserId: string | null;
   onSelect: (id: string) => void;
   onCreate: (title: string) => Promise<Song | null>;
   onDelete: (id: string) => Promise<boolean>;
@@ -22,6 +24,7 @@ export default function SongList({
   selectedSongId,
   loading,
   error,
+  currentUserId,
   onSelect,
   onCreate,
   onDelete,
@@ -94,6 +97,9 @@ export default function SongList({
         )}
         {songs.map((song) => {
           const isSelected = song.id === selectedSongId;
+          // Owner-only delete: allowed when the song is unowned (legacy) or the
+          // current user is its owner. Mirrors the API's 403 guard.
+          const canDelete = song.ownerId === null || song.ownerId === currentUserId;
           return (
             <div
               key={song.id}
@@ -124,26 +130,28 @@ export default function SongList({
               >
                 {song.title}
               </button>
-              {/* Delete — visible on hover or when selected */}
-              <button
-                onClick={(e) => handleDelete(song, e)}
-                title="Delete song"
-                aria-label={`Delete ${song.title}`}
-                style={{
-                  flexShrink: 0,
-                  padding: "2px 10px",
-                  border: "none",
-                  background: "transparent",
-                  color: "var(--text-muted)",
-                  fontSize: 15,
-                  lineHeight: 1,
-                  cursor: "pointer",
-                  visibility:
-                    hoveredId === song.id || isSelected ? "visible" : "hidden",
-                }}
-              >
-                ×
-              </button>
+              {/* Delete — owner-only; visible on hover or when selected */}
+              {canDelete && (
+                <button
+                  onClick={(e) => handleDelete(song, e)}
+                  title="Delete song"
+                  aria-label={`Delete ${song.title}`}
+                  style={{
+                    flexShrink: 0,
+                    padding: "2px 10px",
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--text-muted)",
+                    fontSize: 15,
+                    lineHeight: 1,
+                    cursor: "pointer",
+                    visibility:
+                      hoveredId === song.id || isSelected ? "visible" : "hidden",
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
           );
         })}
