@@ -23,7 +23,14 @@ export function useAuth() {
   }, []);
 
   const loginWithGithub = useCallback(async () => {
-    await authClient.signIn.social({ provider: "github" });
+    // callbackURL: where GitHub sends the user back AFTER a successful login. Without it,
+    // Better Auth redirects to its baseURL (the API domain) whose "/" has no route →
+    // "Cannot GET /". Point it at the web app's own origin (a trusted origin).
+    await authClient.signIn.social({
+      provider: "github",
+      callbackURL: window.location.origin,
+      errorCallbackURL: window.location.origin,
+    });
   }, []);
 
   return {
