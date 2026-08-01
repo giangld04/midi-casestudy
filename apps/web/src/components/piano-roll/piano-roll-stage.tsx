@@ -7,9 +7,8 @@
  *   - FPS/metrics overlay + zoom controls (Phase 06)
  *
  * Performance (Phase 06):
- *   - Notes are culled to the visible tick window before rendering (bounded node
- *     count regardless of song size).
- *   - Grid is cached to an offscreen bitmap (static across scroll).
+ *   - Notes AND grid lines are culled to the visible tick window before rendering
+ *     (bounded Konva node count regardless of song size or zoom level).
  *   - Vertical zoom adjusts pixelsPerTick (all coordinate math is parameterized).
  *
  * Interactions:
@@ -179,6 +178,8 @@ export default function PianoRollStage({
               height={stageHeight}
               trackWidth={coords.trackWidth}
               pixelsPerTick={pixelsPerTick}
+              firstTick={viewport.firstTick}
+              lastTick={viewport.lastTick}
             />
             <NotesLayer
               notes={visibleNotes}

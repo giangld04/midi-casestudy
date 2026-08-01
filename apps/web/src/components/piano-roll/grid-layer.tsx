@@ -6,13 +6,12 @@
  * - Horizontal major lines every 4 ticks = 1 s (brighter)
  * - Second labels every 4 ticks on the left edge
  *
- * Performance (Phase 06): the grid is its own Konva Layer (separate canvas) and
- * scrolling is native DOM scroll of the parent div — so this layer is drawn once
- * per commit and is NOT re-rasterized while scrolling or while notes change on a
- * sibling layer. It re-renders only on resize/zoom. We deliberately do NOT call
- * `layer.cache()`: at max zoom the cached bitmap (up to ~9600px tall × retina)
- * would consume hundreds of MB for no scroll-time benefit. `listening={false}`
- * also keeps it out of hit-testing.
+ * Performance: tick lines are culled to the visible [firstTick, lastTick] window
+ * (same viewport the notes layer uses) instead of drawing all MAX_TIME_TICK+1 rows.
+ * Without culling, zooming in re-created ~1500 Konva nodes (1200 lines + labels) on
+ * every pixelsPerTick change — janky even with few notes. Now node count is bounded
+ * by the viewport (a few dozen) at any zoom. `listening={false}` keeps it out of
+ * hit-testing; we deliberately do NOT `layer.cache()` (a ~9600px retina bitmap).
  */
 
 import { Layer, Line, Text, Rect } from "react-konva";
@@ -28,6 +27,10 @@ interface GridLayerProps {
   height: number;
   trackWidth: number;
   pixelsPerTick: number;
+  /** First visible tick (inclusive) — grid rows outside the viewport are not drawn */
+  firstTick: number;
+  /** Last visible tick (inclusive) */
+  lastTick: number;
 }
 
 export default function GridLayer({
@@ -35,6 +38,8 @@ export default function GridLayer({
   height,
   trackWidth,
   pixelsPerTick,
+  firstTick,
+  lastTick,
 }: GridLayerProps) {
   // Vertical track dividers
   const trackLines = Array.from({ length: TRACK_COUNT - 1 }, (_, i) => (
@@ -46,9 +51,11 @@ export default function GridLayer({
     />
   ));
 
-  // Horizontal tick lines — full grid, drawn once per commit (static across scroll)
+  // Horizontal tick lines — only the visible window (viewport-culled)
   const tickLines: React.ReactNode[] = [];
-  for (let tick = 0; tick <= MAX_TIME_TICK; tick++) {
+  const from = Math.max(0, firstTick);
+  const to = Math.min(MAX_TIME_TICK, lastTick);
+  for (let tick = from; tick <= to; tick++) {
     const y = tick * pixelsPerTick;
     const isMajor = tick % 4 === 0; // every 4 ticks = 1 second
 
