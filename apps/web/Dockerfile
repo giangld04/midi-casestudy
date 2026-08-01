@@ -20,6 +20,11 @@ COPY . .
 # Install from local cache
 RUN pnpm install --frozen-lockfile --offline
 
+# Build-time API URL (baked into the SPA by Vite). Railway/CI pass this as a
+# --build-arg; without it the client would default to http://localhost:3000.
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 # Build web SPA (tsc + vite build → dist/)
 RUN pnpm --filter @ama-midi/web build
 
