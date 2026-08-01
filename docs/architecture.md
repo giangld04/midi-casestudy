@@ -6,36 +6,52 @@ Diagram-first overview of the system. For phase-by-phase implementation detail s
 
 ## System Overview
 
-```mermaid
-flowchart LR
-  subgraph Browser["Browser — apps/web (React 18 + Vite)"]
-    UI["Piano-roll UI<br/>Konva Stage + Layers"]
-    SC["socket.io-client<br/>(websocket)"]
-    AC["Better Auth client"]
-  end
+Two views: a **structure** map (what talks to what) and an **end-to-end sequence**
+(how a session actually flows over time).
 
-  subgraph Server["apps/api — Node + Express (:3000)"]
-    REST["REST routes<br/>/api/songs · /api/notes · /api/songs/search"]
-    BA["Better Auth handler<br/>/api/auth/*"]
-    IO["Socket.io server<br/>rooms · presence · cursors"]
+### Structure (who connects to whom)
+
+```mermaid
+flowchart TB
+  U["Browser<br/>React 18 + Konva + socket.io-client"]
+  subgraph API["apps/api (:3000) — one HTTP server"]
+    T["REST /api/* + Better Auth<br/>+ Socket.io (rooms · presence · cursors)"]
     SVC["Service layer<br/>note · song · event · search · embedding"]
   end
+  U -->|"REST + WebSocket (cookie session)"| T
+  T --> SVC
+  SVC --> PG[("PostgreSQL 16<br/>+ pgvector")]
+  T <-->|"pub/sub fan-out"| RD[("Redis 7")]
+  SVC -. "fire-and-forget" .-> GEM["Gemini API<br/>gemini-embedding-001 (768-d)"]
+```
 
-  subgraph Data["Stateful backends"]
-    PG[("PostgreSQL 16<br/>+ pgvector")]
-    RD[("Redis 7<br/>Socket.io adapter")]
-  end
-  GEM["Gemini Embeddings API<br/>gemini-embedding-001 (768-d)"]
+### End-to-end sequence (over time)
 
-  UI -->|"/api proxy (Vite dev)"| REST
-  AC -->|cookie session| BA
-  SC <-->|"note:* · presence:* · cursor:*"| IO
-  REST --> SVC
-  IO --> SVC
-  BA --> PG
-  SVC --> PG
-  SVC -.fire-and-forget.-> GEM
-  IO <-->|pub/sub fan-out| RD
+```mermaid
+sequenceDiagram
+  actor U as User (Browser)
+  participant API as REST /api/*
+  participant Auth as Better Auth
+  participant IO as Socket.io
+  participant SVC as Service layer
+  participant PG as Postgres+pgvector
+  participant RD as Redis
+  participant GEM as Gemini
+
+  U->>Auth: login (cookie session)
+  Auth->>PG: validate + store session
+  U->>API: GET /api/songs (load)
+  API->>SVC: fetch → PG
+  U->>IO: connect + join-song (cookie auth)
+  U->>IO: note:create / update / delete
+  IO->>SVC: validate + tx (upsert + event)
+  SVC->>PG: INSERT ... ON CONFLICT / UPDATE version
+  IO->>RD: fan-out broadcast (cross-node)
+  IO-->>U: note:created (all clients in room)
+  SVC->>GEM: embed title/desc (fire-and-forget)
+  GEM-->>SVC: 768-d vector, stored in PG
+  U->>API: GET /api/songs/search?q=...
+  API->>PG: cosine distance (ILIKE fallback)
 ```
 
 The API and WebSocket share one HTTP server/port. REST and Socket.io mutations flow through
@@ -86,34 +102,33 @@ Auth tables (`user`, `session`, `account`, `verification`) are owned by Better A
 
 ## Component Layout
 
+Read this as a **dependency chain** (left → right), not a wiring diagram:
+
 ```mermaid
-flowchart TB
+flowchart LR
   subgraph web["apps/web"]
-    direction TB
-    pr["piano-roll/<br/>stage · grid · notes · selection · cursors · fps · note-inspector"]
-    collab["collaboration/<br/>presence-indicator"]
-    search["search/<br/>semantic-search-bar"]
-    auth["auth/<br/>login · user-menu · protected-route"]
-    hooks["hooks/<br/>use-realtime-notes · use-socket · use-viewport-culling · use-auth · use-notes"]
-    lib["lib/<br/>coordinate-utils · performance-utils · socket-client · auth-client"]
+    UIweb["UI: piano-roll · search · auth · collaboration"]
+    HL["hooks + lib"]
+    UIweb --> HL
   end
   subgraph api["apps/api"]
-    direction TB
-    routes["routes/<br/>song · note · search"]
-    mw["middleware/<br/>require-auth · rate-limiter · csrf · validate"]
-    services["services/<br/>note · song · event · search · embedding"]
-    socket["socket/<br/>server · room-handler · note-handler · presence · redis-adapter"]
+    RT["routes"] --> MW["middleware"] --> SVCc["services"]
+    SK["socket handlers"] --> SVCc
   end
-  subgraph pkg["packages"]
-    db["db/ (Drizzle schema + migrations)"]
-    shared["shared/ (typed socket events + models)"]
-  end
-  routes --> mw --> services --> db
-  socket --> services
-  hooks --> lib
-  web -. shared types .-> shared
-  api -. shared types .-> shared
+  DB["packages/db<br/>(Drizzle schema + migrations)"]
+  SH["packages/shared<br/>(typed events + models)"]
+
+  HL -->|"REST + WS"| api
+  SVCc --> DB
+  web -. shared types .-> SH
+  api -. shared types .-> SH
 ```
+
+Folder detail: `web` = `piano-roll/` (stage·grid·notes·selection·cursors·fps·note-inspector),
+`hooks/` (use-realtime-notes·use-socket·use-viewport-culling·use-auth), `lib/`
+(coordinate-utils·socket-client·auth-client). `api` = `routes/`, `middleware/`
+(require-auth·rate-limiter·csrf·validate), `services/`, `socket/`
+(server·room-handler·note-handler·presence·redis-adapter).
 
 ## Canvas Rendering Pipeline
 
@@ -162,6 +177,23 @@ sequenceDiagram
 Presence (`join-song` → `presence:update`) and live cursors (`cursor:move` → volatile
 `cursor:update`) ride the same connection; cursors are ephemeral (never persisted, dropped
 under load rather than buffered).
+
+## Note Lifecycle (state)
+
+```mermaid
+stateDiagram-v2
+  [*] --> Optimistic: user draws (temp reqId)
+  Optimistic --> Confirmed: note:created (swap temp→real id)
+  Optimistic --> Rolledback: note:rejected (conflict/stale/invalid)
+  Rolledback --> [*]
+  Confirmed --> Confirmed: update (version + 1, CAS)
+  Confirmed --> Deleted: delete (idempotent)
+  Deleted --> [*]
+```
+
+A note is rendered locally the instant a user draws it (Optimistic), then either promoted on the
+server echo (Confirmed) or rolled back on `note:rejected`. Updates advance the `version` (optimistic
+lock); deletes are idempotent and always win.
 
 ## Cross-Node Scaling
 
