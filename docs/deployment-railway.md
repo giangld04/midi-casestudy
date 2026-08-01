@@ -82,15 +82,26 @@ VITE_API_URL=https://<API_URL>
 
 1. Trigger a deploy on both `api` and `web` (Railway auto-deploys on variable change / git push).
 2. Watch **api** logs → wait for the server to bind `:3000`.
-3. **Run migrations** from your machine against the DB's public URL (one-time):
+3. **Run migrations.** Postgres has **no public TCP proxy by default**, so the
+   simplest one-time method is to run drizzle's migrator *inside Railway's
+   network* via SSH into the healthy `api` container (where
+   `postgres.railway.internal` resolves and `drizzle-orm`/`pg` + the copied
+   `drizzle/` folder already exist):
 
    ```bash
-   # Copy DATABASE_PUBLIC_URL from the Postgres service → Variables tab
-   cd apps/../packages/db   # i.e. packages/db
-   DATABASE_URL="<DATABASE_PUBLIC_URL>" npx tsx src/migrate.ts
+   railway ssh --service api "sh -c 'cd /prod && NODE_PATH=/prod/node_modules \
+     node -e \"const{drizzle}=require(\\'drizzle-orm/node-postgres\\');\
+     const{migrate}=require(\\'drizzle-orm/node-postgres/migrator\\');\
+     const{Pool}=require(\\'pg\\');\
+     const db=drizzle(new Pool({connectionString:process.env.DATABASE_URL}));\
+     migrate(db,{migrationsFolder:\\'/prod/drizzle\\'}).then(()=>console.log(\\'done\\'));\"'"
    ```
 
-   Expect: `Running migrations... Migrations complete.`
+   Expect: `done` (creates pgvector ext, songs/notes/events, Better Auth tables, ivfflat index).
+
+   *Alternative:* enable **Postgres → Settings → Networking → TCP Proxy** in the
+   dashboard, copy `DATABASE_PUBLIC_URL`, then
+   `DATABASE_URL="<public url>" npx tsx packages/db/src/migrate.ts`.
 
 4. Open `https://<WEB_URL>` → sign up with email/password → place notes.
 
@@ -120,3 +131,12 @@ The Dashboard flow above is more reliable for the two-Dockerfile monorepo + pgve
   pgvector template and re-run migrations.
 - **Web 502 / no response** → web service target port must be **80** (nginx), api target port **3000**.
 - **Redis adapter errors** → confirm `REDIS_URL=${{Redis.REDIS_URL}}` resolved (check api Variables).
+- **api healthcheck fails / 404 though build succeeds** → the api must be built with **tsup**
+  (`apps/api/tsup.config.ts`), not plain `tsc`. The workspace packages `@ama-midi/db` and
+  `@ama-midi/shared` ship raw TS (`main: src/index.ts`); a `tsc` build leaves
+  `require("@ama-midi/db")` in the output and `node dist/index.js` crashes on the `.ts` file.
+  tsup inlines those two packages (`noExternal`) while keeping npm deps external.
+- **web healthcheck "service unavailable"** → nginx listens on **80**, but Railway probes the
+  `PORT` env var (default 8080). Set **`PORT=80`** on the web service so the probe hits nginx.
+  Root `railway.json` also must **not** define `startCommand` (it is shared by both services;
+  a `node dist/index.js` command would break the nginx container).
