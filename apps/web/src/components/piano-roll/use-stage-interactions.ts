@@ -61,6 +61,10 @@ export function useStageInteractions({
 }: UseStageInteractionsParams) {
   const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
+  // Cells with an in-flight createNote, keyed "track:tick". Blocks duplicate
+  // notes stacking when the same grid cell is clicked repeatedly before the
+  // async create resolves (notes state hasn't updated yet).
+  const pendingCellsRef = useRef<Set<string>>(new Set());
 
   // Keyboard: Delete/Backspace → delete all; Space → play/pause
   useEffect(() => {
@@ -131,11 +135,23 @@ export function useStageInteractions({
       if (!pos || mode !== "draw") return;
       const track = coords.track(pos.x);
       const tick = coords.tick(pos.y);
-      void onCreateNote(track, tick);
+      const key = `${track}:${tick}`;
+      // Skip if a note already exists at this cell or one is being created there
+      const occupied =
+        pendingCellsRef.current.has(key) ||
+        notes.some((n) => n.track === track && n.timeTick === tick);
+      if (occupied) {
+        onPreview(track);
+        return;
+      }
+      pendingCellsRef.current.add(key);
+      void onCreateNote(track, tick).finally(() =>
+        pendingCellsRef.current.delete(key)
+      );
       onPreview(track);
       setSelectedIds(new Set());
     },
-    [mode, coords, onCreateNote, onPreview, setSelectedIds]
+    [mode, coords, notes, onCreateNote, onPreview, setSelectedIds]
   );
 
   return { marqueeRect, handleMouseDown, handleMouseMove, handleMouseUp, handleClick };

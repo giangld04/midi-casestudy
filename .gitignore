@@ -36,3 +36,6 @@ Thumbs.db
 
 # Coverage
 coverage/
+
+# Internal documentation — keep local, do not push
+docs/
