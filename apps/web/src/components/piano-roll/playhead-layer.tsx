@@ -52,9 +52,9 @@ export default function PlayheadLayer({
 }: PlayheadLayerProps) {
   const y = currentTick * pixelsPerTick - scrollTop;
 
-  // Show the line/marker only while active and within the visible viewport.
-  const showLine =
-    visible && y >= -MARKER_RADIUS && y <= containerHeight + MARKER_RADIUS;
+  // Playhead is always shown (including at init, tick 0) as long as it's
+  // within the viewport. `visible` (playing) only boosts the glow emphasis.
+  const showLine = y >= -MARKER_RADIUS && y <= containerHeight + MARKER_RADIUS;
 
   /** Convert a stage-local Y into a clamped integer tick. */
   const yToTick = (stageY: number): number => {
@@ -98,7 +98,7 @@ export default function PlayheadLayer({
             strokeWidth={2}
             shadowColor={PLAYHEAD_COLOR}
             shadowBlur={6}
-            shadowOpacity={0.8}
+            shadowOpacity={visible ? 0.8 : 0.35}
           />
           {/* Position marker on the ruler */}
           <RegularPolygon

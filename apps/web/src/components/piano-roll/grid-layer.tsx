@@ -18,7 +18,7 @@
  */
 
 import { Layer, Line, Text, Rect } from "react-konva";
-import { TRACK_COUNT, MAX_TIME_TICK } from "@ama-midi/shared";
+import { TRACK_COUNT, MAX_TIME_TICK, TICKS_PER_SECOND } from "@ama-midi/shared";
 
 // CSS token resolved values (Konva canvas, no CSS variables available)
 const BEAT_STROKE = "#2d2d44"; // --grid-line
@@ -91,21 +91,27 @@ export default function GridLayer({
       />
     );
 
-    // Bar number label at each bar line (skip bar 0 / the very top edge)
-    if (isBar && tick > 0) {
-      const barNumber = tick / ticksPerBar + 1;
-      tickLines.push(
-        <Text
-          key={`label-${tick}`}
-          x={4}
-          y={y + 2}
-          text={`${barNumber}`}
-          fontSize={9}
-          fill={LABEL_COLOR}
-          listening={false}
-        />
-      );
-    }
+  }
+
+  // Second labels ("1s", "2s" …) placed right of the seek ruler. Spacing is
+  // widened as you zoom out so labels never overlap (min ~28px apart).
+  const secStep = Math.max(1, Math.ceil(28 / (TICKS_PER_SECOND * pixelsPerTick)));
+  const stepTicks = TICKS_PER_SECOND * secStep;
+  const fromSec = Math.ceil(Math.max(0, firstTick) / stepTicks) * stepTicks;
+  for (let tick = fromSec; tick <= to; tick += stepTicks) {
+    if (tick === 0) continue;
+    const y = tick * pixelsPerTick - scrollTop;
+    tickLines.push(
+      <Text
+        key={`sec-${tick}`}
+        x={30}
+        y={y - 4}
+        text={`${tick / TICKS_PER_SECOND}s`}
+        fontSize={9}
+        fill={LABEL_COLOR}
+        listening={false}
+      />
+    );
   }
 
   return (
