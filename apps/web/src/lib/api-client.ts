@@ -11,13 +11,13 @@
 
 import type { ApiResponse } from "@ama-midi/shared";
 
-// API origin (same source as auth-client/socket-client). Relative paths like "/api/songs"
-// must be resolved against this — otherwise fetch hits the web origin and nginx returns
-// index.html (SPA fallback), which the caller then fails to parse as JSON.
-const API_URL =
-  (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:3000";
+// API origin (same source as auth-client/socket-client). Same-origin by default:
+// with VITE_API_URL empty, relative paths like "/api/songs" stay relative and hit
+// THIS origin, where nginx (prod) / the Vite dev proxy forwards /api to the API.
+// This keeps requests first-party so the session cookie is sent back.
+const API_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "";
 
-/** Resolve a request path: absolute URLs pass through, "/paths" get the API origin prefixed. */
+/** Resolve a request path: absolute URLs pass through, "/paths" get the API origin prefixed (empty → same-origin). */
 function resolveUrl(url: string): string {
   return /^https?:\/\//.test(url) ? url : `${API_URL}${url}`;
 }

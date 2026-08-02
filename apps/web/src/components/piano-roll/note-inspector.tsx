@@ -67,8 +67,11 @@ export default function NoteInspector({ note, onUpdate, onDelete }: NoteInspecto
     }
     const base = baseRef.current;
     const hasEdits = base && draft ? Object.keys(changedFields(draft, base)).length > 0 : false;
-    if (base?.id !== note.id || !hasEdits) {
-      // New note, or no unsaved edits → adopt server state as the new base.
+    // Does the incoming note already match our draft? Then this version bump is our
+    // OWN save echoing back (or a no-op change) — NOT a remote edit, so don't warn.
+    const matchesDraft = draft ? Object.keys(changedFields(draft, note)).length === 0 : false;
+    if (base?.id !== note.id || !hasEdits || matchesDraft) {
+      // New note, no unsaved edits, or our own save landed → adopt server state as base.
       baseRef.current = note;
       setDraft(draftOf(note));
       setRemoteChanged(false);
