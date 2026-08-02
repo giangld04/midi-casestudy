@@ -52,10 +52,10 @@ OTEL_RESOURCE_ATTRIBUTES     = deployment.environment=production,service.namespa
 - API down (page): `up == 0` / no OTLP data received.
 
 ## Status
-- [ ] deps + scripts
-- [ ] telemetry.ts / logger.ts / metrics.ts
-- [ ] wire index.ts + socket-server.ts
-- [ ] tsup + Dockerfile preload
-- [ ] docs + .env.example
-- [ ] typecheck + build
-- [ ] deploy + set Grafana Cloud env
+- [x] deps + scripts
+- [x] telemetry.ts / logger.ts / metrics.ts
+- [x] wire index.ts + socket-server.ts
+- [x] tsup + Dockerfile preload
+- [x] docs + .env.example
+- [x] typecheck + build
+- [x] deploy + set Grafana Cloud env — live, `[otel] telemetry started` confirmed, exporting to prod-ap-southeast-1

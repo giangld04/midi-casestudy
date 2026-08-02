@@ -59,7 +59,12 @@ railway variables --service api \
 
 ## Dashboards — four golden signals (RED)
 
-Build a Grafana dashboard (or import a Node/OTel community one). Core PromQL:
+**Import the ready-made one:** Grafana → **Dashboards → New → Import → Upload JSON file** →
+`docs/grafana/ama-midi-red-dashboard.json`. When prompted, pick your metrics data source
+(`grafanacloud-<stack>-prom`). Panels: request rate by route, 5xx error %, p95/p99 latency,
+active WebSocket connections.
+
+Or build by hand from the core PromQL:
 
 ```promql
 # Rate (req/s) by route
@@ -84,11 +89,16 @@ app_socket_connections_active
 
 Create in **Grafana → Alerting → Alert rules**. Page only on user-facing symptoms:
 
-| Alert | Condition (5m) | Tier |
-|-------|----------------|------|
-| High error rate | error % `> 0.01` (1%) | Page |
-| High p99 latency | p99 `> 1s` | Page |
-| No telemetry / API down | no OTLP data received | Page |
+| Alert | Query (Grafana-managed rule) | Fires when | Tier |
+|-------|------------------------------|------------|------|
+| High error rate | `sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count[5m])),1e-9)` | `> 0.01` for 5m | Page |
+| High p99 latency | `histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le))` | `> 1` for 5m | Page |
+| No telemetry / API down | `sum(rate(http_server_request_duration_seconds_count[5m]))` | `< 0.001` (or `NoData`) for 5m | Page |
+
+**Create each rule:** Alerting → **Alert rules → New alert rule** → data source = your Mimir/Prom →
+paste query (reduce = `Last`, condition = `IS ABOVE`/`IS BELOW` per table) → `for = 5m` →
+pick a folder + notification contact point. For "API down", set **Alert state if no data =
+Alerting** so a silent exporter still pages.
 
 Skip cause-based noise (CPU 90%, disk 70%) — investigate those via dashboards, don't page.
 Every alert must be actionable; if you don't know what to do when it fires, delete it.
