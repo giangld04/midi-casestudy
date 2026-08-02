@@ -11,7 +11,10 @@ import { defineConfig } from "tsup";
 // every real npm dependency stays external and is resolved from the pruned
 // production `node_modules` produced by `pnpm --prod deploy`.
 export default defineConfig({
-  entry: ["src/index.ts"],
+  // Second entry builds the telemetry bootstrap as its own file so prod can preload
+  // it via `node --require ./dist/observability/telemetry.js` BEFORE index.js loads,
+  // guaranteeing OpenTelemetry patches http/express/pg/ioredis in time.
+  entry: ["src/index.ts", "src/observability/telemetry.ts"],
   format: ["cjs"],
   platform: "node",
   target: "node24",

@@ -49,4 +49,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3000/health || exit 1
 
-CMD ["node", "dist/index.js"]
+# Preload OpenTelemetry so it patches http/express/pg/ioredis before index.js loads.
+# No-op at runtime unless OTEL_EXPORTER_OTLP_ENDPOINT is configured.
+CMD ["node", "--require", "./dist/observability/telemetry.js", "dist/index.js"]

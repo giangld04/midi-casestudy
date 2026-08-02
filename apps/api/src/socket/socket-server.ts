@@ -11,6 +11,7 @@ import { auth } from "../auth/auth-config";
 import { attachRedisAdapter } from "./redis-adapter";
 import { registerSongRoomHandlers } from "./song-room-handler";
 import { registerNoteEventHandlers } from "./note-event-handler";
+import { activeSocketConnections } from "../observability/metrics";
 
 /** Per-socket data set by auth middleware (available in all event handlers). */
 export interface SocketData {
@@ -62,6 +63,10 @@ export function createSocketServer(httpServer: HttpServer): AppIO {
   });
 
   io.on("connection", (socket) => {
+    // Track live connections as a gauge (saturation signal for the realtime layer).
+    activeSocketConnections.add(1);
+    socket.on("disconnect", () => activeSocketConnections.add(-1));
+
     registerSongRoomHandlers(io, socket);
     registerNoteEventHandlers(io, socket);
   });

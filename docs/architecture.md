@@ -29,29 +29,29 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-  actor U as User (Browser)
-  participant API as REST /api/*
+  actor U as User Browser
+  participant API as REST API
   participant Auth as Better Auth
   participant IO as Socket.io
   participant SVC as Service layer
-  participant PG as Postgres+pgvector
+  participant PG as Postgres pgvector
   participant RD as Redis
   participant GEM as Gemini
 
-  U->>Auth: login (cookie session)
-  Auth->>PG: validate + store session
-  U->>API: GET /api/songs (load)
-  API->>SVC: fetch → PG
-  U->>IO: connect + join-song (cookie auth)
-  U->>IO: note:create / update / delete
-  IO->>SVC: validate + tx (upsert + event)
-  SVC->>PG: INSERT ... ON CONFLICT / UPDATE version
-  IO->>RD: fan-out broadcast (cross-node)
-  IO-->>U: note:created (all clients in room)
-  SVC->>GEM: embed title/desc (fire-and-forget)
-  GEM-->>SVC: 768-d vector, stored in PG
-  U->>API: GET /api/songs/search?q=...
-  API->>PG: cosine distance (ILIKE fallback)
+  U->>Auth: login cookie session
+  Auth->>PG: validate and store session
+  U->>API: GET api/songs load
+  API->>SVC: fetch from PG
+  U->>IO: connect and join-song cookie auth
+  U->>IO: mutate note create update delete
+  IO->>SVC: validate and tx upsert plus event
+  SVC->>PG: INSERT ON CONFLICT or UPDATE version
+  IO->>RD: fan-out broadcast cross-node
+  IO-->>U: note created for all clients in room
+  SVC->>GEM: embed title desc fire-and-forget
+  GEM-->>SVC: 768-d vector stored in PG
+  U->>API: GET api/songs/search q
+  API->>PG: cosine distance ILIKE fallback
 ```
 
 The API and WebSocket share one HTTP server/port. REST and Socket.io mutations flow through
@@ -130,6 +130,123 @@ Folder detail: `web` = `piano-roll/` (stage·grid·notes·selection·cursors·fp
 (require-auth·rate-limiter·csrf·validate), `services/`, `socket/`
 (server·room-handler·note-handler·presence·redis-adapter).
 
+## API & Socket Contracts
+
+The complete request/response surface: which REST path, what body struct goes up,
+what socket event carries what data, and the two-gate check before every fan-out.
+
+### REST endpoints (path · body · response)
+
+Every `/api/*` route runs the same chain: `requireAuth` (cookie session) →
+`rateLimiter` (Redis-backed) → `router` (Zod validate → service → Postgres).
+
+| Method + Path | Body struct | Response |
+| --- | --- | --- |
+| `GET /health` | — | `{ ok: true }` |
+| `GET /api/songs` | — | `{ ok, data: Song[] }` |
+| `GET /api/songs/:id` | — | `{ ok, data: Song }` |
+| `POST /api/songs` | `createSongSchema` | `201 { ok, data: Song }` |
+| `PUT /api/songs/:id` | `updateSongSchema` | `{ ok, data: Song }` |
+| `DELETE /api/songs/:id` | — | `204` |
+| `GET /api/songs/:songId/notes` | — | `{ ok, data: Note[] }` |
+| `POST /api/songs/:songId/notes` | `createNoteSchema` | `201 { ok, data: Note }` |
+| `PUT /api/notes/:id` | `updateNoteSchema` | `{ ok, data: Note }` |
+| `DELETE /api/notes/:id` | — | `204` |
+| `GET /api/songs/search?q=` | query `q` | `{ ok, data: Song[] }` |
+| `/api/auth/*` | Better Auth | cookie session |
+
+Note body structs (Zod bounds mirror the DB CHECK constraints, defense-in-depth):
+
+```
+createNoteSchema = {
+  title:       string 1..255      // required
+  description?: string <=1000
+  track:       int 1..8           // required (lane)
+  timeTick:    int 0..1200        // required (time position)
+  color?:      "#rrggbb"
+}
+updateNoteSchema = {
+  title? description? track? timeTick? color?   // all optional
+  version:     int >= 0           // REQUIRED → optimistic lock (reject stale writes)
+}
+```
+
+### Socket events (name · payload)
+
+```
+Client → Server                          Server → Client (fanned out to the room)
+join-song   {songId, name?}              presence:update {users: PresenceUser[]}
+leave-song  {songId}                     cursor:update   {userId, name, color, track, timeTick}
+note:create {songId, reqId, title,       cursor:leave    {userId}
+             track, timeTick, color?}     note:created    {note, reqId}
+note:update {songId, reqId, noteId,      note:updated    {note, reqId}
+             version, track?, timeTick?,  note:deleted    {noteId, reqId}
+             title?, description?, color?} note:rejected   {reqId, code, error}  (SENDER only)
+note:delete {songId, reqId, noteId}
+cursor:move {songId, track, timeTick}
+```
+
+`reqId` is a client-generated nonce: the sender renders an optimistic temp note, and
+the server echoes `reqId` back on `note:created` so the sender can swap temp → real id.
+
+### End-to-end + the fan-out gate
+
+```mermaid
+sequenceDiagram
+  actor A as Client A
+  participant B as Client B same room
+  participant IO as Socket.io server
+  participant PS as presence-store RAM
+  participant RL as RateLimiter Redis
+  participant SVC as note-service tx
+  participant PG as Postgres
+  participant RD as Redis adapter
+
+  Note over A,IO: 1. Join
+  A->>IO: join-song {songId}
+  IO->>PS: addMember(socket.id, songId)
+  IO-->>A: presence:update {users}
+  IO-->>B: presence:update {users}
+
+  Note over A,PG: 2. Create note (optimistic)
+  A->>A: render temp note (reqId)
+  A->>IO: note:create {songId, reqId, track, timeTick, color}
+
+  Note over IO,RL: 3. Two-gate check before fan-out
+  IO->>PS: getMemberSongId(socket.id) == songId ?
+  alt not joined
+    IO-->>A: note:rejected {FORBIDDEN}
+  else joined
+    IO->>RL: take(userId) under 60/min ?
+    alt over limit
+      IO-->>A: note:rejected {RATE_LIMIT}
+    else ok
+      IO->>SVC: Zod validate + INSERT ON CONFLICT + append event (1 tx)
+      alt duplicate cell / invalid
+        SVC-->>IO: throw AppError
+        IO-->>A: note:rejected {CONFLICT/VALIDATION}
+        A->>A: rollback temp note
+      else success
+        SVC->>PG: persist note + event
+        IO->>RD: fan-out via Redis pub/sub (cross-node)
+        IO-->>A: note:created {note, reqId}
+        IO-->>B: note:created {note, reqId}
+        A->>A: swap temp note to real id
+      end
+    end
+  end
+```
+
+The **fan-out gate** (in `note-event-handler.ts` `precheck`) is two checks:
+1. **Joined the room?** `getMemberSongId(socket.id) === songId` else `FORBIDDEN`
+   (blocks editing an arbitrary song by guessing its UUID).
+2. **Under rate limit?** `limiter.take(userId)` (60/min, keyed by user across tabs/nodes)
+   else `RATE_LIMIT`.
+
+Past both gates, the service transaction runs and `io.to(room).emit(...)` is the fan-out
+point — the Redis adapter republishes to every API node via pub/sub, so Client B receives
+the event even when connected to a different node.
+
 ## Canvas Rendering Pipeline
 
 ```mermaid
@@ -156,21 +273,21 @@ renders with the same per-frame cost as a small one. Vertical zoom is a single `
 sequenceDiagram
   participant A as Client A
   participant S as Socket.io server
-  participant Svc as note-service (tx)
-  participant R as Room (all clients)
+  participant Svc as note-service tx
+  participant R as Room all clients
 
-  A->>A: optimistic render (temp-reqId)
-  A->>S: note:create {songId, reqId, track, timeTick, ...}
-  S->>S: precheck — joined room? under rate limit?
-  S->>Svc: validate (Zod) → INSERT ... ON CONFLICT DO NOTHING<br/>+ append event (same tx)
+  A->>A: optimistic render temp-reqId
+  A->>S: note:create {songId, reqId, track, timeTick}
+  S->>S: precheck joined room and under rate limit
+  S->>Svc: validate Zod then INSERT ON CONFLICT DO NOTHING plus append event
   alt success
     Svc-->>S: note row
     S->>R: note:created {note, reqId}
-    A->>A: swap temp-reqId → real id
-  else conflict / stale / invalid
+    A->>A: swap temp-reqId to real id
+  else conflict or stale or invalid
     Svc-->>S: throw AppError
     S-->>A: note:rejected {reqId, code}
-    A->>A: rollback optimistic state + toast
+    A->>A: rollback optimistic state plus toast
   end
 ```
 
@@ -183,7 +300,7 @@ under load rather than buffered).
 ```mermaid
 stateDiagram-v2
   [*] --> Optimistic: user draws (temp reqId)
-  Optimistic --> Confirmed: note:created (swap temp→real id)
+  Optimistic --> Confirmed: note:created (swap temp to real id)
   Optimistic --> Rolledback: note:rejected (conflict/stale/invalid)
   Rolledback --> [*]
   Confirmed --> Confirmed: update (version + 1, CAS)

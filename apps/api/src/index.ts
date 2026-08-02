@@ -4,6 +4,11 @@
 // Better Auth needs raw body access, so it mounts BEFORE express.json().
 // rateLimiter is applied per protected-route chain AFTER requireAuth so it can key by user id.
 import "dotenv/config";
+// Telemetry MUST be imported first so OpenTelemetry patches http/express/pg/ioredis
+// before they load. No-op unless OTEL_EXPORTER_OTLP_ENDPOINT is set. (Prod also
+// preloads it via `node --require`; the SDK start is idempotent.)
+import "./observability/telemetry";
+import { logger } from "./observability/logger";
 import { createServer } from "http";
 import express, { type Express } from "express";
 import cors from "cors";
@@ -70,7 +75,7 @@ if (process.env["NODE_ENV"] !== "test") {
   const httpServer = createServer(app);
   createSocketServer(httpServer);
   httpServer.listen(PORT, () => {
-    console.log(`[api] listening on http://localhost:${PORT}`);
+    logger.info({ port: PORT }, "[api] listening");
   });
 }
 
