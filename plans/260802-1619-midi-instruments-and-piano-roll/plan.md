@@ -13,18 +13,28 @@ preview). Three requested features, ordered by size. Do in a fresh session
 - `piano-roll-stage.tsx` — wired; Space=play/pause; auto-scroll; click-create plays preview.
 - dep: `tone`.
 
-## Phase 1 — GM instrument picker (screenshot: Categories | Instruments)
-- Lib: **`smplr`** (SoundFont2 sampler, CDN samples) or `@tonejs/instruments`. Replaces PolySynth voice.
-- GM map: 16 categories (Piano, Chromatic Perc, Organ, Guitar, Bass, Strings, Ensemble, Brass, Reed, Pipe, Synth Lead, …) → instrument list. Static data file `lib/gm-instruments.ts`.
-- Engine: swap `ensureSynth()` → load selected instrument sampler (async, cache); keep `triggerAttackRelease` API.
-- UI: `components/song/instrument-picker-dialog.tsx` — two-pane (category list | instrument list) + OK/Cancel, matches app dark theme + green accent.
-- State: selected instrument per **song** (simple) or per **track** (richer). Persist? MVP = client state; later add `song.instrument` column.
-- Entry point: button in toolbar or track-header.
+## Phase 1 — GM instrument picker ✅ DONE (per-song, client-only, smplr)
+Decisions: scope = **per-song**; persistence = **client-only** (no DB/socket); lib = **smplr** (MusyngKite SoundFont, CDN samples).
+- `lib/gm-instruments.ts` — 16 GM families × 8 = 128 instruments (gleitz snake_case ids) + `DEFAULT_INSTRUMENT` + `instrumentLabel()`.
+- `lib/playback-engine.ts` — PolySynth replaced by smplr `Soundfont(rawContext,{instrument})` loaded on Tone's AudioContext (shared clock); `setInstrument()` + Map cache + async `ensureSampler()`; Part callback calls `sampler.start({note,time,duration})`. play/pause/stop/preview API unchanged.
+- `hooks/use-playback.ts` — exposes `{instrument,setInstrument}`.
+- `components/song/instrument-picker-dialog.tsx` — two-pane (category | instrument) + OK/Cancel, dark theme + green accent, dbl-click = quick select.
+- `piano-roll-stage.tsx` — pill button (bottom-right) shows current instrument, opens dialog.
+- Verified: tsc clean, vite build ok (bundle ~809kB), 52 tests pass. Real audio not unit-tested (needs Web Audio).
+- Later (deferred): persist to `song.instrument` column; per-track instruments.
 
-## Phase 2 — Beats / BPM grid (question: "chia phách?")
-- Current grid = seconds (major line every 4 ticks = 1s). Add fixed **BPM** (e.g. 120): 1 beat = 2 ticks, 1 bar(4/4) = 8 ticks.
-- `grid-layer.tsx`: relabel major = bar, minor = beat; time readout `bar:beat`.
-- No DB change if BPM fixed; optional `song.bpm` later.
+## Phase 2 — Beats / BPM grid ✅ DONE (fixed BPM 120, 4/4)
+- `grid-layer.tsx`: TICKS_PER_BEAT=2, TICKS_PER_BAR=8. Beat lines every 2 ticks (--grid-line), bar lines every 8 ticks (--grid-bold). Labels = bar number (1,2,3…) at each bar (was "Ns" seconds). Viewport culling kept. No props/DB change.
+- Transport already shows BPM 120 + bar:beat readout (Phase-1 UI pass) → now visually matches grid.
+- Verified: tsc clean, vite build ok, 52 tests pass.
+- Optional later: editable/`song.bpm`.
+
+## UI pass (done alongside Phase 1) ✅
+- Full-width transport bar (rewind·stop·play·BPM·bar:beat:hundredths).
+- Secondary `editor-toolbar.tsx`: instrument pill + volume + pan sliders + draw/select tool toggles.
+- Multi-select marquee: `marquee-layer.tsx` + `use-stage-interactions.ts` (mode draw/select, selectedIds Set, delete-many).
+- Volume/pan: engine GainNode→StereoPannerNode chain; use-playback exposes volume/pan/setVolume/setPan.
+- Color unified to app cyan `--accent` (#00d4ff): tokens --accent-green* + `theme-constants.ts` (Konva).
 
 ## Phase 3 — Vertical piano-roll (screenshot: Y = piano keys C3/C4)
 - BIG: flips coordinate model. Currently X=track(8), Y=time. Reference = Y=pitch, X=time.

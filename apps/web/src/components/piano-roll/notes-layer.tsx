@@ -7,6 +7,10 @@
  * `NoteCircle` so only added/removed/selected notes re-render — steady scroll
  * pays near-zero reconciliation cost.
  *
+ * Phase 08: accepts `selectedIds: Set<string>` for multi-select highlight in
+ * addition to the single-note `selectedNoteId`. A note is highlighted if it
+ * appears in either.
+ *
  * - Each note = colored Circle at (canvasX(track), canvasY(timeTick))
  * - Draggable: on DragEnd, inverse-maps new position → snapped (track, tick)
  *   and calls onMove (which handles optimistic update + 409 revert)
@@ -79,7 +83,10 @@ const NoteCircle = memo(function NoteCircle({
 interface NotesLayerProps {
   /** Visible (already culled) notes to render */
   notes: Note[];
+  /** Single selected note id — for Inspector focus (single-select). */
   selectedNoteId: string | null;
+  /** Multi-select set — note is highlighted if its id is in this set. */
+  selectedIds: Set<string>;
   canvasX: (track: number) => number;
   canvasY: (tick: number) => number;
   /** Inverse: canvas X → track */
@@ -93,6 +100,7 @@ interface NotesLayerProps {
 export default function NotesLayer({
   notes,
   selectedNoteId,
+  selectedIds,
   canvasX,
   canvasY,
   trackFromX,
@@ -106,7 +114,8 @@ export default function NotesLayer({
         <NoteCircle
           key={note.id}
           note={note}
-          selected={note.id === selectedNoteId}
+          // Highlight if in multi-select set OR single-selected (Inspector)
+          selected={selectedIds.has(note.id) || note.id === selectedNoteId}
           canvasX={canvasX}
           canvasY={canvasY}
           trackFromX={trackFromX}

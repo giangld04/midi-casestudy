@@ -10,6 +10,15 @@
   --text-muted: #8888aa;
   --accent: #00d4ff;
   --accent-hover: #33ddff;
+  /* Accent used in piano-roll: play button, active tool, marquee, selected instrument.
+     Matches the app-wide cyan --accent (#00d4ff) for a unified palette. */
+  --accent-green: var(--accent);
+  --accent-green-soft: rgba(0, 212, 255, 0.15);
+  --accent-green-subtle: rgba(0, 212, 255, 0.16);
+  /* Glow shadow for elements highlighted in the accent */
+  --accent-green-glow: rgba(0, 212, 255, 0.5);
+  /* Shared panel surface for floating UI (transport bar, toolbar, zoom controls) */
+  --panel-bg: rgba(15, 15, 24, 0.93);
   --danger: #ff6b6b;
   --border: #2d2d44;
   --radius: 4px;

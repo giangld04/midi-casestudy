@@ -1,9 +1,9 @@
 /**
  * Konva Layer: the moving playhead.
  *
- * Time flows down the Y-axis, so the playhead is a horizontal line sweeping
- * downward at y = currentTick * pixelsPerTick. Kept in its own non-listening
- * layer so it never interferes with note hit-testing.
+ * Time flows down the Y-axis. The playhead is a horizontal line at
+ * y = currentTick * pixelsPerTick - scrollTop  (stage-local coordinate).
+ * Hidden when it scrolls above the visible window (y < 0).
  */
 
 import { Layer, Line } from "react-konva";
@@ -13,9 +13,11 @@ interface PlayheadLayerProps {
   currentTick: number;
   /** Vertical scale (px per tick) — must match the grid/notes. */
   pixelsPerTick: number;
+  /** Current scroll offset (px) — subtracted to produce stage-local Y. */
+  scrollTop: number;
   /** Stage width so the line spans the full canvas. */
   width: number;
-  /** Hide the line entirely when idle at the very top. */
+  /** Hide the line entirely when idle. */
   visible: boolean;
 }
 
@@ -24,12 +26,16 @@ const PLAYHEAD_COLOR = "#22c55e";
 export default function PlayheadLayer({
   currentTick,
   pixelsPerTick,
+  scrollTop,
   width,
   visible,
 }: PlayheadLayerProps) {
   if (!visible) return <Layer listening={false} />;
 
-  const y = currentTick * pixelsPerTick;
+  const y = currentTick * pixelsPerTick - scrollTop;
+
+  // Don't render if out of the visible viewport
+  if (y < 0 || y > 9999) return <Layer listening={false} />;
 
   return (
     <Layer listening={false}>
