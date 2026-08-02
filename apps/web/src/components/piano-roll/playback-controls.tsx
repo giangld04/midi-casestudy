@@ -7,6 +7,7 @@
  * With BPM=120: 1 beat = 0.5s = 2 ticks, 1 bar (4/4) = 8 ticks.
  */
 
+import { useEffect, useState } from "react";
 import { TICK_SECONDS } from "@/lib/playback-engine";
 
 interface PlaybackControlsProps {
@@ -59,6 +60,16 @@ export default function PlaybackControls({
   onBpmChange,
 }: PlaybackControlsProps) {
   void totalTick; // kept in props for future use; not displayed in this layout
+
+  // Local editable BPM text so the user can clear the field / type freely
+  // (e.g. "400"); the value is only committed + clamped on blur or Enter.
+  const [bpmText, setBpmText] = useState(String(bpm));
+  useEffect(() => setBpmText(String(bpm)), [bpm]);
+  const commitBpm = () => {
+    const v = parseInt(bpmText, 10);
+    if (isNaN(v)) return setBpmText(String(bpm));
+    onBpmChange(v);
+  };
 
   return (
     <div style={barStyle}>
@@ -120,19 +131,18 @@ export default function PlaybackControls({
           <path d="M12 9l3 5H9l3-5z" fill="var(--text-muted)" opacity="0.5" />
         </svg>
         <span style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em" }}>BPM</span>
-        {/* Editable number input — clamps 40–300 on change */}
+        {/* Editable BPM — free typing; committed + clamped on blur / Enter */}
         <input
           type="number"
-          min={40}
-          max={300}
-          value={bpm}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10);
-            if (!isNaN(v)) onBpmChange(v);
+          value={bpmText}
+          onChange={(e) => setBpmText(e.target.value)}
+          onBlur={commitBpm}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
           style={bpmInputStyle}
           aria-label="BPM"
-          title="Beats per minute (40–300)"
+          title="Beats per minute"
         />
       </div>
 

@@ -50,9 +50,9 @@ export function usePianoRollState({
   const [mode, setMode] = useState<EditorMode>("draw");
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  /** BPM: visual grid + time readout only; audio stays tick-based. Range 40–300. */
-  const [bpm, setBpmRaw] = useState(120);
-  const setBpm = useCallback((v: number) => setBpmRaw(Math.max(40, Math.min(300, Math.round(v)))), []);
+  /** BPM: visual grid + time readout only; audio stays tick-based. Default 300, wide range. */
+  const [bpm, setBpmRaw] = useState(300);
+  const setBpm = useCallback((v: number) => setBpmRaw(Math.max(1, Math.min(1000, Math.round(v)))), []);
 
   // Observe container size changes
   useEffect(() => {
