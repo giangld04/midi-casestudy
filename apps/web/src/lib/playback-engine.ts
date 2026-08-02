@@ -10,7 +10,7 @@
 
 import * as Tone from "tone";
 import { Soundfont } from "smplr";
-import { TICKS_PER_SECOND } from "@ama-midi/shared";
+import { TICKS_PER_SECOND, MAX_TIME_TICK } from "@ama-midi/shared";
 import type { Note } from "@ama-midi/shared";
 import { DEFAULT_INSTRUMENT } from "./gm-instruments";
 
@@ -149,6 +149,12 @@ export class PlaybackEngine {
     await Tone.start();
     const sampler = await this.ensureSampler();
     sampler.start({ note: TRACK_PITCHES[track] ?? "C4", duration: NOTE_DURATION_SECONDS });
+  }
+
+  /** Seek the transport to the given tick (clamped to valid range). Works while playing or paused. */
+  seek(tick: number): void {
+    const t = Tone.getTransport();
+    t.seconds = Math.max(0, Math.min(MAX_TIME_TICK, tick)) * TICK_SECONDS;
   }
 
   /** Current transport position expressed in ticks. */

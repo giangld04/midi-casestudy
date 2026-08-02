@@ -20,8 +20,10 @@ interface PlaybackControlsProps {
   onToggle: () => void;
   /** Restart/stop → resets the playhead to 0. */
   onStop: () => void;
-  /** BPM for the time readout display (default 120). */
-  bpm?: number;
+  /** BPM for the time readout + grid display. */
+  bpm: number;
+  /** Called when user edits BPM (value already clamped 40–300). */
+  onBpmChange: (bpm: number) => void;
 }
 
 /**
@@ -53,7 +55,8 @@ export default function PlaybackControls({
   disabled,
   onToggle,
   onStop,
-  bpm = 120,
+  bpm,
+  onBpmChange,
 }: PlaybackControlsProps) {
   void totalTick; // kept in props for future use; not displayed in this layout
 
@@ -108,7 +111,7 @@ export default function PlaybackControls({
 
       <div style={dividerStyle} />
 
-      {/* Metronome icon + BPM display */}
+      {/* Metronome icon + editable BPM input */}
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         {/* Metronome SVG */}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: "var(--text-muted)", opacity: 0.7 }}>
@@ -117,9 +120,20 @@ export default function PlaybackControls({
           <path d="M12 9l3 5H9l3-5z" fill="var(--text-muted)" opacity="0.5" />
         </svg>
         <span style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.06em" }}>BPM</span>
-        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", fontFamily: "monospace", minWidth: 28, textAlign: "left" }}>
-          {bpm}
-        </span>
+        {/* Editable number input — clamps 40–300 on change */}
+        <input
+          type="number"
+          min={40}
+          max={300}
+          value={bpm}
+          onChange={(e) => {
+            const v = parseInt(e.target.value, 10);
+            if (!isNaN(v)) onBpmChange(v);
+          }}
+          style={bpmInputStyle}
+          aria-label="BPM"
+          title="Beats per minute (40–300)"
+        />
       </div>
 
       <div style={dividerStyle} />
@@ -192,4 +206,21 @@ const timeStyle: React.CSSProperties = {
   color: "var(--text-primary)",
   minWidth: 100,
   textAlign: "center",
+};
+
+const bpmInputStyle: React.CSSProperties = {
+  width: 44,
+  fontSize: 14,
+  fontWeight: 700,
+  fontFamily: "monospace",
+  color: "var(--text-primary)",
+  background: "transparent",
+  border: "1px solid transparent",
+  borderRadius: 4,
+  padding: "1px 2px",
+  textAlign: "center",
+  accentColor: "var(--accent)",
+  outline: "none",
+  // Highlight on focus with accent cyan
+  cursor: "text",
 };

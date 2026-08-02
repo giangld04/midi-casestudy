@@ -25,6 +25,8 @@ export interface UsePlayback {
   toggle: () => void;
   /** Stop and reset the playhead to 0. */
   stop: () => void;
+  /** Seek to a specific tick — updates transport + React state immediately. */
+  seek: (tick: number) => void;
   /** Audition a single track's pitch (e.g. when a note is created). */
   preview: (track: number) => void;
   /** Currently selected GM instrument id (per song). */
@@ -113,6 +115,13 @@ export function usePlayback(notes: readonly Note[]): UsePlayback {
     rafRef.current = requestAnimationFrame(loop);
   }, [stop]);
 
+  const seek = useCallback((tick: number) => {
+    // Update transport position immediately (works playing or paused)
+    engineRef.current?.seek(tick);
+    // Update React state so playhead + time readout reflect the new position
+    setTick(tick);
+  }, []);
+
   const preview = useCallback((track: number) => {
     void engineRef.current?.preview(track);
   }, []);
@@ -146,6 +155,7 @@ export function usePlayback(notes: readonly Note[]): UsePlayback {
     currentTick,
     toggle,
     stop,
+    seek,
     preview,
     instrument,
     setInstrument,

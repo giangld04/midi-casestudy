@@ -1,11 +1,15 @@
 /**
  * Konva Layer: static background grid.
  *
- * Musical grid — BPM 120, 4/4 time:
+ * Musical grid — derived from bpm prop, 4/4 time:
  * - 8 vertical track dividers
- * - Horizontal beat lines every TICKS_PER_BEAT (2 ticks = 0.5 s) — thin, dim
- * - Horizontal bar lines every TICKS_PER_BAR  (8 ticks = 2 s)   — bold, brighter
+ * - Horizontal beat lines every ticksPerBeat — thin, dim
+ * - Horizontal bar lines every ticksPerBar (ticksPerBeat * 4) — bold, brighter
  * - Bar number labels (1, 2, 3 …) at each bar line, left-edge, muted
+ *
+ * ticksPerBeat = Math.max(1, Math.round(240 / bpm))
+ *   since beat = 60/bpm s, tick = 0.25 s → 240/bpm ticks per beat.
+ *   BPM 120 → 2 ticks/beat; BPM 60 → 4; BPM 240 → 1.
  *
  * Performance: tick lines are culled to the visible [firstTick, lastTick] window.
  * All Y positions are stage-local (absolute Y minus scrollTop) so they render
@@ -16,16 +20,16 @@
 import { Layer, Line, Text, Rect } from "react-konva";
 import { TRACK_COUNT, MAX_TIME_TICK } from "@ama-midi/shared";
 
-// Musical grid constants — BPM 120, 4/4 time (1 tick = 0.25 s)
-// 1 beat = 0.5 s = 2 ticks; 1 bar = 4 beats = 8 ticks
-const TICKS_PER_BEAT = 2;
-const TICKS_PER_BAR = 8;
-
 // CSS token resolved values (Konva canvas, no CSS variables available)
 const BEAT_STROKE = "#2d2d44"; // --grid-line
 const BAR_STROKE = "#3d3d5c";  // --grid-bold
 const LABEL_COLOR = "#8888aa"; // --text-muted
 const BG_COLOR = "#1a1a2e";    // --bg-primary
+
+/** Derive grid tick counts from BPM (tick = 0.25 s, beat = 60/bpm s). */
+export function bpmToTicksPerBeat(bpm: number): number {
+  return Math.max(1, Math.round(240 / bpm));
+}
 
 interface GridLayerProps {
   width: number;
@@ -39,6 +43,8 @@ interface GridLayerProps {
   firstTick: number;
   /** Last visible tick (inclusive) */
   lastTick: number;
+  /** BPM controls grid beat/bar spacing (default 120). */
+  bpm?: number;
 }
 
 export default function GridLayer({
@@ -49,7 +55,12 @@ export default function GridLayer({
   scrollTop,
   firstTick,
   lastTick,
+  bpm = 120,
 }: GridLayerProps) {
+  // Derive beat/bar tick counts from BPM (4/4 time)
+  const ticksPerBeat = bpmToTicksPerBeat(bpm);
+  const ticksPerBar = ticksPerBeat * 4;
+
   // Vertical track dividers span the full stage height (no scroll offset needed)
   const trackLines = Array.from({ length: TRACK_COUNT - 1 }, (_, i) => (
     <Line
@@ -63,12 +74,12 @@ export default function GridLayer({
   // Horizontal beat/bar lines — only the visible window (viewport-culled).
   // Y = tick * ppt - scrollTop  → stage-local coordinate
   const tickLines: React.ReactNode[] = [];
-  const fromBeat = Math.floor(Math.max(0, firstTick) / TICKS_PER_BEAT) * TICKS_PER_BEAT;
+  const fromBeat = Math.floor(Math.max(0, firstTick) / ticksPerBeat) * ticksPerBeat;
   const to = Math.min(MAX_TIME_TICK, lastTick);
 
-  for (let tick = fromBeat; tick <= to; tick += TICKS_PER_BEAT) {
+  for (let tick = fromBeat; tick <= to; tick += ticksPerBeat) {
     const y = tick * pixelsPerTick - scrollTop;
-    const isBar = tick % TICKS_PER_BAR === 0;
+    const isBar = tick % ticksPerBar === 0;
 
     tickLines.push(
       <Line
@@ -82,7 +93,7 @@ export default function GridLayer({
 
     // Bar number label at each bar line (skip bar 0 / the very top edge)
     if (isBar && tick > 0) {
-      const barNumber = tick / TICKS_PER_BAR + 1;
+      const barNumber = tick / ticksPerBar + 1;
       tickLines.push(
         <Text
           key={`label-${tick}`}

@@ -67,6 +67,8 @@ export default function PianoRollStage({
     interactions,
     stepZoom,
     totalScrollHeight,
+    bpm,
+    setBpm,
   } = usePianoRollState({
     notes,
     onCreateNote,
@@ -107,6 +109,7 @@ export default function PianoRollStage({
                   scrollTop={viewport.scrollTop}
                   firstTick={viewport.firstTick}
                   lastTick={viewport.lastTick}
+                  bpm={bpm}
                 />
                 <NotesLayer
                   notes={visibleNotes}
@@ -136,6 +139,8 @@ export default function PianoRollStage({
                   scrollTop={viewport.scrollTop}
                   width={stageWidth}
                   visible={playback.isPlaying || playback.currentTick > 0}
+                  containerHeight={containerHeight}
+                  onSeek={playback.seek}
                 />
               </Stage>
             </div>
@@ -155,7 +160,7 @@ export default function PianoRollStage({
         </div>
 
         <EditorToolbar instrument={playback.instrument} onOpenPicker={() => setPickerOpen(true)} volume={playback.volume} onVolume={playback.setVolume} pan={playback.pan} onPan={playback.setPan} mode={mode} onMode={setMode} />
-        <PlaybackControls isPlaying={playback.isPlaying} currentTick={playback.currentTick} totalTick={notes.reduce((m, n) => Math.max(m, n.timeTick), 0)} disabled={notes.length === 0} onToggle={playback.toggle} onStop={playback.stop} bpm={120} />
+        <PlaybackControls isPlaying={playback.isPlaying} currentTick={playback.currentTick} totalTick={notes.reduce((m, n) => Math.max(m, n.timeTick), 0)} disabled={notes.length === 0} onToggle={playback.toggle} onStop={playback.stop} bpm={bpm} onBpmChange={setBpm} />
 
         {pickerOpen && (
           <InstrumentPickerDialog
