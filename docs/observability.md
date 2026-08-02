@@ -103,6 +103,34 @@ Alerting** so a silent exporter still pages.
 Skip cause-based noise (CPU 90%, disk 70%) — investigate those via dashboards, don't page.
 Every alert must be actionable; if you don't know what to do when it fires, delete it.
 
+## Trace an error end-to-end (runbook)
+
+Every failed request flows through one exit point (`middleware/error-handler.ts`), which:
+
+1. **Marks the span** — on `5xx` it calls `span.recordException(err)` + sets status
+   `ERROR`, so the request surfaces as a red **error trace** in Tempo. `4xx` (validation,
+   not-found, forbidden, conflict) stay `OK` — expected client errors don't inflate error rate.
+2. **Returns the `traceId`** in the JSON body: `{ "ok": false, "code": "...", "traceId": "abc123..." }`.
+3. **Logs it** — `logger.error/warn` with `code`/`status`/`method`/`path`; pino auto-injects
+   `trace_id`/`span_id`, so the log lands in Loki already correlated.
+
+**To debug a specific failure:**
+
+1. Grab the `traceId` — from the client's error response, or from the Loki log line
+   (`{service_name="ama-midi-api"} | json | level="error"`).
+2. **Grafana → Explore → Tempo → Search by Trace ID** → paste it. You see the full span
+   tree (http → express route → pg/redis), the failing span in red, and the recorded
+   exception (message + stack) under **Span events**.
+3. From that trace, **"Logs for this span"** (Tempo→Loki correlation) jumps to every log
+   line sharing the `trace_id` — the exact error log with method/path/code.
+4. Reverse direction works too: from a Loki error log, the `trace_id` field links back to
+   the Tempo trace.
+
+> Trace↔log correlation (Tempo "Trace to logs" + Loki derived `trace_id` field) is
+> pre-wired in Grafana Cloud stacks. If a stack lacks it: Tempo datasource → *Trace to
+> logs* → target Loki, tag `trace_id`; Loki datasource → *Derived fields* → regex
+> `"trace_id":"(\w+)"` → internal link to Tempo.
+
 ## Troubleshooting
 
 - **No data in Grafana** → check `OTEL_EXPORTER_OTLP_HEADERS` base64 auth; watch API
