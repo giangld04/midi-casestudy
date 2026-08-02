@@ -28,10 +28,13 @@ import { useCoordinateMapping } from "@/hooks/use-coordinate-mapping";
 import { useViewport } from "@/hooks/use-viewport";
 import { useViewportCulling } from "@/hooks/use-viewport-culling";
 import { useFpsCounter } from "@/hooks/use-fps-counter";
+import { usePlayback } from "@/hooks/use-playback";
 import GridLayer from "./grid-layer";
 import NotesLayer from "./notes-layer";
 import SelectionLayer from "./selection-layer";
 import CursorsLayer from "./cursors-layer";
+import PlayheadLayer from "./playhead-layer";
+import PlaybackControls from "./playback-controls";
 import FpsOverlay from "./fps-overlay";
 import TrackHeader from "./track-header";
 import type { UseNotes } from "@/hooks/use-notes";
@@ -104,6 +107,18 @@ export default function PianoRollStage({
   const showMetrics = import.meta.env.DEV;
   const fps = useFpsCounter(showMetrics);
 
+  // Audio playback (Tone.js) — drives the moving playhead + auto-scroll.
+  const playback = usePlayback(notes);
+
+  // Keep the playhead in view while playing (scroll so it sits ~1/3 from top).
+  useEffect(() => {
+    if (!playback.isPlaying) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const target = playback.currentTick * pixelsPerTick - containerHeight / 3;
+    el.scrollTop = Math.max(0, target);
+  }, [playback.isPlaying, playback.currentTick, pixelsPerTick, containerHeight]);
+
   const zoom = useCallback((delta: number) => {
     setPixelsPerTick((p) =>
       Math.max(MIN_PIXELS_PER_TICK, Math.min(MAX_PIXELS_PER_TICK, p + delta))
@@ -123,10 +138,16 @@ export default function PianoRollStage({
         void onDeleteNote(selectedNote.id);
         setSelectedNote(null);
       }
+
+      // Space toggles play/pause (prevent the default page scroll).
+      if (e.key === " ") {
+        e.preventDefault();
+        playback.toggle();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedNote, onDeleteNote]);
+  }, [selectedNote, onDeleteNote, playback.toggle]);
 
   // Click on empty stage area → create note
   const handleStageClick = useCallback(
@@ -138,8 +159,9 @@ export default function PianoRollStage({
       const track = coords.track(pos.x);
       const tick = coords.tick(pos.y);
       void onCreateNote(track, tick);
+      playback.preview(track); // audition the new note
     },
-    [coords, onCreateNote]
+    [coords, onCreateNote, playback.preview]
   );
 
   // Broadcast local pointer position (throttling handled in useSocket)
@@ -207,6 +229,12 @@ export default function PianoRollStage({
               canvasX={coords.canvasX}
               canvasY={coords.canvasY}
             />
+            <PlayheadLayer
+              currentTick={playback.currentTick}
+              pixelsPerTick={pixelsPerTick}
+              width={stageWidth}
+              visible={playback.isPlaying || playback.currentTick > 0}
+            />
           </Stage>
         </div>
 
@@ -214,6 +242,16 @@ export default function PianoRollStage({
         {showMetrics && (
           <FpsOverlay fps={fps} totalNotes={notes.length} renderedNotes={visibleNotes.length} />
         )}
+
+        {/* Transport controls (Play/Stop + time) */}
+        <PlaybackControls
+          isPlaying={playback.isPlaying}
+          currentTick={playback.currentTick}
+          totalTick={notes.reduce((m, n) => Math.max(m, n.timeTick), 0)}
+          disabled={notes.length === 0}
+          onToggle={playback.toggle}
+          onStop={playback.stop}
+        />
 
         {/* Vertical zoom controls */}
         <div
